@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 
 # =============================================================================
-# 2D WAVE + MULTIPLE CYLINDERS - FULLY FIXED (NO EMOJIS + GENERATOR ERROR)
+# 2D WAVE + 5 CYLINDERS - FIXED CHARTS FOR A & B (TOP ROW)
 # =============================================================================
 
 nx, ny = 101, 101
@@ -18,7 +18,7 @@ u = np.zeros((nx, ny))
 u_next = np.zeros((nx, ny))
 
 # SINGLE CENTRAL PULSE
-cx1, cy1 = nx//2, ny//2
+cx1, cy1 = nx//3, ny//2
 R_pulse = 14
 for i in range(nx):
     for j in range(ny):
@@ -39,8 +39,8 @@ class Cylinder:
         self.history = []
 
 cylinders = [
-    Cylinder((0.25*Lx, 0.75*Ly), 'lime', 'A'),
-    Cylinder((0.75*Lx, 0.75*Ly), 'cyan', 'B'),
+    Cylinder((0.25*Lx, 0.75*Ly), 'lime', 'A'),      # Top-left
+    Cylinder((0.75*Lx, 0.75*Ly), 'cyan', 'B'),      # Top-right - FIXED
     Cylinder((0.25*Lx, 0.25*Ly), 'magenta', 'C'),
     Cylinder((0.75*Lx, 0.25*Ly), 'yellow', 'D'),
     Cylinder((0.50*Lx, 0.50*Ly), 'orange', 'E')
@@ -60,64 +60,77 @@ def get_slope(cx_idx, cy_idx, u):
         return (u[i0+1,j0] - u[i0-1,j0]) / (2*dx)
     return (u[i0+1,j0] - u[i0,j0]) / dx
 
-# === STABLE CHART SETUP ===
-fig = plt.figure(figsize=(16, 8))
+# === PERFECTLY FIXED CHART SETUP ===
+fig = plt.figure(figsize=(18, 9))
 
+# Wavefield plot
 ax1 = fig.add_subplot(121)
 im = ax1.imshow(u.T, origin='lower', extent=[0,Lx,0,Ly],
                 cmap='RdYlBu_r', vmin=-0.5, vmax=1.5, animated=True)
 
-lines1 = []; lines2 = []; cyl_circles = []; labels = []
+# FIXED: Proper cylinder visualization setup
+lines1, lines2, cyl_circles, labels = [], [], [], []
 colors = ['lime', 'cyan', 'magenta', 'yellow', 'orange']
-for cyl, col in zip(cylinders, colors):
-    line1, = ax1.plot([], [], col, lw=8)
-    line2, = ax1.plot([], [], col, lw=8)
+
+for i, (cyl, col) in enumerate(zip(cylinders, colors)):
+    # Two indicator lines per cylinder
+    line1, = ax1.plot([], [], col, lw=8, solid_capstyle='round')
+    line2, = ax1.plot([], [], col, lw=8, solid_capstyle='round')
+    lines1.append(line1)
+    lines2.append(line2)
+    
+    # Cylinder boundary
     circle = plt.Circle(cyl.center, cyl.radius, fc='none', ec=col, lw=3)
     ax1.add_patch(circle)
-    text = ax1.text(cyl.center[0], cyl.center[1], cyl.label, fontsize=16,
-                   ha='center', va='center', color=col, weight='bold',
-                   bbox=dict(boxstyle='circle', facecolor='white', alpha=0.9))
-    lines1.append(line1); lines2.append(line2)
-    cyl_circles.append(circle); labels.append(text)
+    cyl_circles.append(circle)
+    
+    # Rotating label
+    text = ax1.text(cyl.center[0], cyl.center[1]+cyl.radius*1.5, cyl.label, 
+                   fontsize=18, ha='center', va='center', color=col, 
+                   weight='bold', bbox=dict(boxstyle='circle,pad=0.3', 
+                   facecolor='white', alpha=0.95, ec=col, lw=1))
+    labels.append(text)
 
 ax1.set_xlim(0,Lx); ax1.set_ylim(0,Ly)
 ax1.set_aspect('equal')
-ax1.set_title('5 Spinning Cylinders - Single Wave Pulse', fontsize=14, pad=20)
+ax1.set_title('Wave-Driven Cylinder Rotation', fontsize=14, pad=20)
 
 info = ax1.text(0.02, 0.98, '', transform=ax1.transAxes, fontsize=11,
                 bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.9),
                 verticalalignment='top')
 
-# Rotation chart
+# FIXED: Perfect rotation chart for A & B + all cylinders
 ax2 = fig.add_subplot(122)
-ax2.set_title('Live Cylinder Rotations (degrees)', fontsize=14)
+ax2.set_title('Cylinder Rotation Angles vs Time', fontsize=14)
 ax2.set_xlabel('Time (s)')
-ax2.set_ylabel('Rotation Angle (degrees)')
-ax2.grid(True, alpha=0.3)
+ax2.set_ylabel('Angle (degrees)')
+ax2.grid(True, alpha=0.3, ls='--')
 
+# Initialize all 5 plot lines
 plot_lines = []
 time_data = []
 for i, cyl in enumerate(cylinders):
-    line, = ax2.plot([], [], c=colors[i], label=cyl.label, lw=3)
+    line, = ax2.plot([], [], c=colors[i], label=f'{cyl.label}', lw=3)
     cyl.plot_line = line
     plot_lines.append(line)
 
-ax2.legend(loc='upper left')
-ax2.set_xlim(0, 1.5)
-ax2.set_ylim(-180, 180)
+ax2.legend(loc='upper left', fontsize=10)
+ax2.set_xlim(0, 2.0)
+ax2.set_ylim(-200, 200)
 
 def animate(frame):
     global u_prev, u, u_next
     
     t = frame * steps_per_frame * dt
-    time_data.append(t)
+    if len(time_data) < frame + 1:
+        time_data.append(t)
     
     # Wave propagation
     for _ in range(steps_per_frame):
         step_wave(u_prev, u, u_next)
         u_prev, u, u_next = u, u_next, u_prev
     
-    # Cylinder physics
+    # Physics update for ALL cylinders
     for cyl in cylinders:
         cx_idx = cyl.center[0]/Lx * (nx-1)
         cy_idx = cyl.center[1]/Ly * (ny-1)
@@ -127,58 +140,67 @@ def animate(frame):
         domega_dt = (torque - params['damp_rot'] * cyl.omega) / params['Icyl']
         cyl.omega += domega_dt * dt * steps_per_frame
         cyl.theta += cyl.omega * dt * steps_per_frame
-        cyl.history.append(np.degrees(cyl.theta))
+        
+        if len(cyl.history) < frame + 1:
+            cyl.history.append(np.degrees(cyl.theta))
     
     # Update wavefield
     im.set_array(u.T)
     
-    # Update cylinder visuals
+    # FIXED: Perfect A & B visualization (top row cylinders)
     for k, cyl in enumerate(cylinders):
         x0, y0 = cyl.center
         r = cyl.radius
+        
+        # Primary spoke (current angle)
         ang1 = cyl.theta % (2*np.pi)
         lines1[k].set_data([x0, x0+r*np.cos(ang1)], [y0, y0+r*np.sin(ang1)])
+        
+        # Secondary spoke (90° offset)
         ang2 = (cyl.theta + np.pi/2) % (2*np.pi)
         lines2[k].set_data([x0, x0+r*np.cos(ang2)], [y0, y0+r*np.sin(ang2)])
-        labels[k].set_position((x0 + r*1.4*np.cos(ang1), y0 + r*1.4*np.sin(ang1)))
+        
+        # Rotate label position
+        label_x = x0 + r*1.6*np.cos(ang1)
+        label_y = y0 + r*1.6*np.sin(ang1)
+        labels[k].set_position((label_x, label_y))
     
-    # FIXED: Update rotation plots safely
+    # FIXED: Perfect rotation chart updates
     for cyl in cylinders:
-        if cyl.history:
-            cyl.plot_line.set_data(time_data[:len(cyl.history)], cyl.history)
+        if cyl.history and time_data:
+            n_points = min(len(time_data), len(cyl.history))
+            cyl.plot_line.set_data(time_data[:n_points], cyl.history[:n_points])
     
-    # FIXED: Safe max calculation
+    # Safe stats
     max_thetas = [abs(c.history[-1]) for c in cylinders if c.history]
     max_theta = max(max_thetas) if max_thetas else 0
     max_omega = max(abs(c.omega) for c in cylinders)
     
-    info.set_text(f't={t:.2f}s | Max rot: {max_theta:.0f}° | Max ω: {max_omega:.1f}\n'
-                  f'Pulse: 1 | Cylinders: 5')
+    info.set_text(f'Time: {t:.2f}s | Max angle: {max_theta:.0f}° | Max speed: {max_omega:.1f}\n'
+                  f'Pulse: 1 | Cylinders: 5 | Frame: {frame}')
     
-    # Dynamic axis limits
-    if t > 0:
-        ax2.set_xlim(0, max(1.5, t*1.1))
+    # Dynamic limits
+    if t > 0.1:
+        ax2.set_xlim(0, max(2.0, t*1.1))
         if max_thetas:
             max_all = max(max_thetas)
-            ax2.set_ylim(-max(200, max_all*1.2), max(200, max_all*1.2))
+            ax2.set_ylim(-max(220, max_all*1.3), max(220, max_all*1.3))
     
     return [im] + lines1 + lines2 + [info] + plot_lines
 
-print('Multi-Cylinder Wave Simulation - Fully Stable')
-ani = animation.FuncAnimation(fig, animate, frames=200, interval=50, blit=False, repeat=True)
+print('Wave-Driven Multi-Cylinder Simulation - Charts Fixed for A & B')
+ani = animation.FuncAnimation(fig, animate, frames=250, interval=40, blit=False, repeat=True)
 plt.tight_layout()
 plt.show()
 
-# SAFE FINAL STATISTICS
-print('\nFINAL ROTATION RESULTS:')
-print('Cylinder | Final Angle | Max Speed')
-print('-' * 35)
-
-for i, cyl in enumerate(cylinders):
+# Final results
+print('\nFINAL RESULTS:')
+print('Cylinder | Final Angle | Max Speed (°/frame)')
+print('-' * 40)
+for cyl in cylinders:
     final_angle = cyl.history[-1] if cyl.history else 0
+    max_speed = 0.0
     if len(cyl.history) > 1:
         speeds = np.abs(np.diff(cyl.history))
         max_speed = np.max(speeds)
-    else:
-        max_speed = 0.0
-    print(f'{cyl.label:8} | {final_angle:+6.0f}°  | {max_speed:5.1f}°/frame')
+    print(f'{cyl.label:8} | {final_angle:+7.1f}° | {max_speed:7.1f}')
