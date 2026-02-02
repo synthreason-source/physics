@@ -18,7 +18,7 @@ u = np.zeros((nx, ny))
 u_next = np.zeros((nx, ny))
 
 # SINGLE CENTRAL PULSE
-cx1, cy1 = nx//3, ny//2
+cx1, cy1 = nx//3, ny//3
 R_pulse = 14
 for i in range(nx):
     for j in range(ny):
