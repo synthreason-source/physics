@@ -173,7 +173,7 @@ def animate(frame):
     return [im] + lines1 + lines2 + [info] + plot_lines
 
 print('SINGLE CONTINUOUS CHART - All 5 Cylinders Perfect Tracking')
-ani = animation.FuncAnimation(fig, animate, frames=400, interval=30, blit=False, repeat=True)
+ani = animation.FuncAnimation(fig, animate, frames=4000000, interval=30, blit=False, repeat=True)
 plt.tight_layout()
 plt.show()
 
