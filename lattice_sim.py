@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 
 # =============================================================================
-# 2D WAVE + 5 CYLINDERS - FIXED CHART CONTINUATION
+# 2D WAVE + 5 CYLINDERS - SINGLE CONTINUOUS CHART
 # =============================================================================
 
 nx, ny = 101, 101
@@ -36,11 +36,10 @@ class Cylinder:
         self.omega = 0.0
         self.color = color
         self.label = label
-        self.history = []
 
 cylinders = [
-    Cylinder((0.25*Lx, 0.75*Ly), 'lime', 'A'),      # Top-left
-    Cylinder((0.75*Lx, 0.75*Ly), 'cyan', 'B'),      # Top-right
+    Cylinder((0.25*Lx, 0.75*Ly), 'lime', 'A'),
+    Cylinder((0.75*Lx, 0.75*Ly), 'cyan', 'B'), 
     Cylinder((0.25*Lx, 0.25*Ly), 'magenta', 'C'),
     Cylinder((0.75*Lx, 0.25*Ly), 'yellow', 'D'),
     Cylinder((0.50*Lx, 0.50*Ly), 'orange', 'E')
@@ -60,19 +59,19 @@ def get_slope(cx_idx, cy_idx, u):
         return (u[i0+1,j0] - u[i0-1,j0]) / (2*dx)
     return (u[i0+1,j0] - u[i0,j0]) / dx
 
-# === FIXED CHART CONTINUATION ===
+# === ONE SINGLE CONTINUOUS CHART ===
 fig = plt.figure(figsize=(18, 9))
 
 ax1 = fig.add_subplot(121)
 im = ax1.imshow(u.T, origin='lower', extent=[0,Lx,0,Ly],
                 cmap='RdYlBu_r', vmin=-0.5, vmax=1.5, animated=True)
 
-# Continuous data storage
+# SINGLE CONTINUOUS DATA STORAGE
 time_data = np.array([])
-theta_histories = {cyl.label: np.array([]) for cyl in cylinders}
+all_thetas = np.array([]).reshape(0, 5)  # [time, cylinders]
 
-lines1, lines2, cyl_circles, labels = [], [], [], []
 colors = ['lime', 'cyan', 'magenta', 'yellow', 'orange']
+lines1, lines2, cyl_circles, labels = [], [], [], []
 
 for i, (cyl, col) in enumerate(zip(cylinders, colors)):
     line1, = ax1.plot([], [], col, lw=8, solid_capstyle='round')
@@ -98,23 +97,22 @@ info = ax1.text(0.02, 0.98, '', transform=ax1.transAxes, fontsize=11,
                 bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.9),
                 verticalalignment='top')
 
-# FIXED CONTINUOUS CHART
+# ONE SINGLE CONTINUOUS PLOT
 ax2 = fig.add_subplot(122)
-ax2.set_title('Continuous Cylinder Rotation Tracking', fontsize=14)
+ax2.set_title('All Cylinders - Single Continuous Tracking', fontsize=14)
 ax2.set_xlabel('Time (s)')
 ax2.set_ylabel('Angle (degrees)')
 ax2.grid(True, alpha=0.3, ls='--')
 
 plot_lines = []
-for i, cyl in enumerate(cylinders):
-    line, = ax2.plot([], [], c=colors[i], label=f'{cyl.label}', lw=3)
-    cyl.plot_line = line
+for i, label in enumerate(['A', 'B', 'C', 'D', 'E']):
+    line, = ax2.plot([], [], c=colors[i], label=label, lw=3)
     plot_lines.append(line)
 
 ax2.legend(loc='upper left', fontsize=10)
 
 def animate(frame):
-    global u_prev, u, u_next, time_data
+    global u_prev, u, u_next, time_data, all_thetas
     
     t = frame * steps_per_frame * dt
     
@@ -123,8 +121,8 @@ def animate(frame):
         step_wave(u_prev, u, u_next)
         u_prev, u, u_next = u, u_next, u_prev
     
-    # Physics + CONTINUOUS DATA STORAGE
-    new_thetas = []
+    # Physics - SINGLE FRAME DATA
+    frame_thetas = []
     for cyl in cylinders:
         cx_idx = cyl.center[0]/Lx * (nx-1)
         cy_idx = cyl.center[1]/Ly * (ny-1)
@@ -134,15 +132,11 @@ def animate(frame):
         domega_dt = (torque - params['damp_rot'] * cyl.omega) / params['Icyl']
         cyl.omega += domega_dt * dt * steps_per_frame
         cyl.theta += cyl.omega * dt * steps_per_frame
-        new_theta_deg = np.degrees(cyl.theta)
-        new_thetas.append(new_theta_deg)
-        cyl.history.append(new_theta_deg)
+        frame_thetas.append(np.degrees(cyl.theta))
     
-    # FIXED: Append to continuous arrays
+    # SINGLE CONTINUOUS APPEND
     time_data = np.append(time_data, t) if len(time_data) > 0 else np.array([t])
-    for i, cyl in enumerate(cylinders):
-        theta_histories[cyl.label] = np.append(theta_histories[cyl.label], new_thetas[i]) \
-                                   if len(theta_histories[cyl.label]) > 0 else np.array([new_thetas[i]])
+    all_thetas = np.vstack([all_thetas, frame_thetas]) if len(all_thetas) > 0 else np.array([frame_thetas])
     
     # Update wavefield
     im.set_array(u.T)
@@ -159,40 +153,37 @@ def animate(frame):
         label_y = y0 + r*1.6*np.sin(ang1)
         labels[k].set_position((label_x, label_y))
     
-    # FIXED: Perfect continuous chart updates
-    for cyl in cylinders:
-        theta_data = theta_histories[cyl.label]
-        if len(theta_data) > 0:
-            cyl.plot_line.set_data(time_data[:len(theta_data)], theta_data)
+    # SINGLE CONTINUOUS CHART UPDATE
+    for i in range(5):
+        if len(all_thetas) > 0:
+            plot_lines[i].set_data(time_data, all_thetas[:,i])
     
     # Stats
-    max_theta = max(np.abs(cyl.history[-1]) for cyl in cylinders)
+    max_theta = np.max(np.abs(all_thetas[-1])) if len(all_thetas) > 0 else 0
     max_omega = max(abs(c.omega) for c in cylinders)
     
-    info.set_text(f'Time: {t:.2f}s | Max: {max_theta:.0f}° | Max ω: {max_omega:.1f}\n'
-                  f'Pulse: 1 | Cylinders: 5 | Frame: {frame}')
+    info.set_text(f'Time: {t:.2f}s | Max: {max_theta:.0f}° | ω_max: {max_omega:.1f}\n'
+                  f'Frame: {frame} | Data pts: {len(time_data)}')
     
     # Dynamic limits
     if len(time_data) > 0:
-        ax2.set_xlim(0, max(2.0, time_data[-1]*1.1))
-        ax2.set_ylim(-max(220, max_theta*1.3), max(220, max_theta*1.3))
+        ax2.set_xlim(0, max(2.5, time_data[-1]*1.1))
+        ax2.set_ylim(-max(250, max_theta*1.4), max(250, max_theta*1.4))
     
     return [im] + lines1 + lines2 + [info] + plot_lines
 
-print('Wave-Driven Multi-Cylinder Simulation - CONTINUOUS CHARTS FIXED')
-ani = animation.FuncAnimation(fig, animate, frames=300, interval=40, blit=False, repeat=True)
+print('SINGLE CONTINUOUS CHART - All 5 Cylinders Perfect Tracking')
+ani = animation.FuncAnimation(fig, animate, frames=400, interval=30, blit=False, repeat=True)
 plt.tight_layout()
 plt.show()
 
-# Final continuous results
-print('\nFINAL CONTINUOUS TRACKING RESULTS:')
-print('Cylinder | Final Angle | Total Steps | Max Speed')
-print('-' * 50)
-for cyl in cylinders:
-    final_angle = cyl.history[-1] if cyl.history else 0
-    total_steps = len(cyl.history)
-    max_speed = 0.0
-    if total_steps > 1:
-        speeds = np.abs(np.diff(cyl.history))
-        max_speed = np.max(speeds)
-    print(f'{cyl.label:8} | {final_angle:+8.1f}° | {total_steps:8d} | {max_speed:7.1f}')
+# Final single continuous results
+print('\nFINAL SINGLE CONTINUOUS RESULTS:')
+print('Cyl | Final °  | Total Steps | Max Speed')
+print('-' * 40)
+for i, cyl in enumerate(cylinders):
+    final_angle = all_thetas[-1,i] if len(all_thetas) > 0 else 0
+    n_steps = len(all_thetas)
+    speeds = np.abs(np.diff(all_thetas[:,i])) if n_steps > 1 else np.array([0])
+    max_speed = np.max(speeds) if len(speeds) > 0 else 0
+    print(f'{cyl.label} | {final_angle:+6.1f} | {n_steps:9d} | {max_speed:7.1f}')
