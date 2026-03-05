@@ -1,0 +1,746 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1050 800" width="1050" height="800">
+<defs>
+
+  <!-- Graph paper background -->
+  <pattern id="smallGrid" width="10" height="10" patternUnits="userSpaceOnUse">
+    <path d="M 10 0 L 0 0 0 10" fill="none" stroke="#b8c8d8" stroke-width="0.3"/>
+  </pattern>
+  <pattern id="bigGrid" width="50" height="50" patternUnits="userSpaceOnUse">
+    <rect width="50" height="50" fill="url(#smallGrid)"/>
+    <path d="M 50 0 L 0 0 0 50" fill="none" stroke="#a0b8cc" stroke-width="0.8"/>
+  </pattern>
+
+  <!-- Paper texture -->
+  <filter id="paper">
+    <feTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="3" stitchTiles="stitch" result="noise"/>
+    <feColorMatrix type="saturate" values="0" in="noise" result="grayNoise"/>
+    <feBlend in="SourceGraphic" in2="grayNoise" mode="multiply" result="blend"/>
+    <feComposite in="blend" in2="SourceGraphic" operator="in"/>
+  </filter>
+
+  <!-- Pencil sketch filter -->
+  <filter id="sketch" x="-5%" y="-5%" width="110%" height="110%">
+    <feTurbulence type="turbulence" baseFrequency="0.02" numOctaves="2" result="noise"/>
+    <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.2" xChannelSelector="R" yChannelSelector="G"/>
+  </filter>
+
+  <!-- Rough edge filter for shapes -->
+  <filter id="rough" x="-5%" y="-5%" width="110%" height="110%">
+    <feTurbulence type="turbulence" baseFrequency="0.04" numOctaves="3" result="noise"/>
+    <feDisplacementMap in="SourceGraphic" in2="noise" scale="2" xChannelSelector="R" yChannelSelector="G"/>
+  </filter>
+
+  <!-- Tape filter -->
+  <filter id="tapeFilter" x="-10%" y="-10%" width="120%" height="120%">
+    <feGaussianBlur stdDeviation="0.5"/>
+  </filter>
+
+  <!-- Shadow for notes -->
+  <filter id="noteShadow">
+    <feDropShadow dx="3" dy="3" stdDeviation="4" flood-color="#555" flood-opacity="0.25"/>
+  </filter>
+  <filter id="lightShadow">
+    <feDropShadow dx="2" dy="2" stdDeviation="3" flood-color="#888" flood-opacity="0.2"/>
+  </filter>
+
+  <!-- Sticky note gradient -->
+  <linearGradient id="yellowNote" x1="0%" y1="0%" x2="100%" y2="100%">
+    <stop offset="0%"   stop-color="#fff9c4"/>
+    <stop offset="100%" stop-color="#fff176"/>
+  </linearGradient>
+  <linearGradient id="pinkNote" x1="0%" y1="0%" x2="100%" y2="100%">
+    <stop offset="0%"   stop-color="#fce4ec"/>
+    <stop offset="100%" stop-color="#f8bbd0"/>
+  </linearGradient>
+  <linearGradient id="blueNote" x1="0%" y1="0%" x2="100%" y2="100%">
+    <stop offset="0%"   stop-color="#e3f2fd"/>
+    <stop offset="100%" stop-color="#bbdefb"/>
+  </linearGradient>
+  <linearGradient id="greenNote" x1="0%" y1="0%" x2="100%" y2="100%">
+    <stop offset="0%"   stop-color="#e8f5e9"/>
+    <stop offset="100%" stop-color="#c8e6c9"/>
+  </linearGradient>
+
+  <!-- Tape piece gradient -->
+  <linearGradient id="tapeGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+    <stop offset="0%"   stop-color="#e8f0f8" stop-opacity="0.85"/>
+    <stop offset="100%" stop-color="#d0dce8" stop-opacity="0.75"/>
+  </linearGradient>
+
+  <!-- Watercolor circle for molecules -->
+  <radialGradient id="waterO" cx="40%" cy="35%" r="60%">
+    <stop offset="0%"   stop-color="#b2dfdb" stop-opacity="0.9"/>
+    <stop offset="100%" stop-color="#4db6ac" stop-opacity="0.7"/>
+  </radialGradient>
+  <radialGradient id="waterH" cx="40%" cy="35%" r="60%">
+    <stop offset="0%"   stop-color="#ffffff" stop-opacity="0.9"/>
+    <stop offset="100%" stop-color="#b0bec5" stop-opacity="0.6"/>
+  </radialGradient>
+  <radialGradient id="waterN" cx="40%" cy="35%" r="60%">
+    <stop offset="0%"   stop-color="#e1bee7" stop-opacity="0.9"/>
+    <stop offset="100%" stop-color="#9c27b0" stop-opacity="0.5"/>
+  </radialGradient>
+
+  <!-- Highlighter marks -->
+  <linearGradient id="hiYellow" x1="0%" y1="60%" x2="100%" y2="40%">
+    <stop offset="0%"   stop-color="#ffff00" stop-opacity="0.4"/>
+    <stop offset="100%" stop-color="#ffee58" stop-opacity="0.55"/>
+  </linearGradient>
+  <linearGradient id="hiGreen" x1="0%" y1="60%" x2="100%" y2="40%">
+    <stop offset="0%"   stop-color="#69f0ae" stop-opacity="0.4"/>
+    <stop offset="100%" stop-color="#b9f6ca" stop-opacity="0.5"/>
+  </linearGradient>
+  <linearGradient id="hiPink" x1="0%" y1="60%" x2="100%" y2="40%">
+    <stop offset="0%"   stop-color="#ff80ab" stop-opacity="0.35"/>
+    <stop offset="100%" stop-color="#ff80ab" stop-opacity="0.45"/>
+  </linearGradient>
+
+  <style>
+    @keyframes wobble {
+      0%,100% { transform: rotate(-1deg); }
+      50%      { transform: rotate(1deg);  }
+    }
+    @keyframes pencilBlink {
+      0%,90%,100% { opacity: 1; }
+      95%          { opacity: 0.3; }
+    }
+    @keyframes arrowDraw {
+      from { stroke-dashoffset: 200; opacity: 0.4; }
+      to   { stroke-dashoffset: 0;   opacity: 1;   }
+    }
+    @keyframes noteFloat {
+      0%,100% { transform: rotate(-2deg) translateY(0px); }
+      50%      { transform: rotate(-2deg) translateY(-3px); }
+    }
+    @keyframes tunnelPop {
+      0%,100% { r: 5px; opacity: 0.7; }
+      50%      { r: 8px; opacity: 1;   }
+    }
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(360deg); }
+    }
+    @keyframes ratchetStep {
+      0%  { transform: rotate(0deg); }
+      85% { transform: rotate(340deg); }
+      92% { transform: rotate(335deg); }
+      100%{ transform: rotate(360deg); }
+    }
+    @keyframes currentFlow {
+      from { stroke-dashoffset: 100; }
+      to   { stroke-dashoffset: 0; }
+    }
+    .wobble      { animation: wobble 3s ease-in-out infinite; }
+    .note-float  { animation: noteFloat 4s ease-in-out infinite; }
+    .tunnel-pop  { animation: tunnelPop 1.5s ease-in-out infinite; }
+    .ratchet     { animation: ratchetStep 2s cubic-bezier(0.25,0.1,0.25,1) infinite; transform-origin: 540px 430px; }
+    .blade-spin  { animation: spin 2.2s linear infinite; transform-origin: 540px 430px; }
+    .current     { stroke-dasharray: 8,5; animation: currentFlow 0.8s linear infinite; }
+    .blink       { animation: pencilBlink 2s ease-in-out infinite; }
+  </style>
+
+</defs>
+
+<!-- ══════════ GRAPH PAPER BASE ══════════ -->
+<rect width="1050" height="800" fill="#f5f8fa"/>
+<rect width="1050" height="800" fill="url(#bigGrid)"/>
+
+<!-- Slight yellowing / aging at edges -->
+<rect width="1050" height="800" fill="#fffbf0" opacity="0.15"/>
+
+<!-- Red margin line (left) -->
+<line x1="72" y1="0" x2="72" y2="800" stroke="#e57373" stroke-width="1.2" opacity="0.6"/>
+
+<!-- Hole punches -->
+<circle cx="36" cy="100" r="10" fill="white" stroke="#ccc" stroke-width="1"/>
+<circle cx="36" cy="400" r="10" fill="white" stroke="#ccc" stroke-width="1"/>
+<circle cx="36" cy="700" r="10" fill="white" stroke="#ccc" stroke-width="1"/>
+
+<!-- ══════════ TITLE — hand lettered style ══════════ -->
+<!-- Highlighter behind title -->
+<rect x="78" y="18" width="680" height="28" rx="3" fill="url(#hiYellow)" filter="url(#rough)"/>
+<text x="82" y="42" font-family="'Comic Sans MS', 'Chalkboard SE', cursive"
+      font-size="28" fill="#1a237e" font-weight="bold" filter="url(#sketch)">
+  DIY Quantum Ratchet Motor
+</text>
+<text x="84" y="58" font-family="'Comic Sans MS', 'Chalkboard SE', cursive"
+      font-size="13" fill="#5c6bc0">
+  (from kitchen H₂O tunneling — yes this is real physics, yes it is wild)
+</text>
+
+<!-- Date scrawl -->
+<text x="820" y="42" font-family="'Comic Sans MS', cursive" font-size="11" fill="#888"
+      transform="rotate(-3 820 42)">
+  Lab notebook pg. 47
+</text>
+<text x="825" y="56" font-family="'Comic Sans MS', cursive" font-size="10" fill="#aaa"
+      transform="rotate(-3 825 56)">
+  ← do NOT show mum
+</text>
+
+<!-- ══════════════════════════════════════════════════════
+     PARTS LIST (top left sticky note)
+══════════════════════════════════════════════════════ -->
+<g transform="rotate(-2 80 75)" filter="url(#noteShadow)">
+  <rect x="82" y="72" width="195" height="218" rx="3" fill="url(#yellowNote)"/>
+  <!-- tape top -->
+  <rect x="148" y="66" width="60" height="16" rx="2" fill="url(#tapeGrad)" opacity="0.9" filter="url(#tapeFilter)"/>
+</g>
+<text x="100" y="97" font-family="'Comic Sans MS', cursive" font-size="11"
+      fill="#e65100" font-weight="bold" transform="rotate(-2 100 97)">🛒 PARTS LIST</text>
+<line x1="96" y1="102" x2="268" y2="102" stroke="#e65100" stroke-width="1" opacity="0.5"
+      transform="rotate(-2 182 102)"/>
+<text x="96" y="117" font-family="'Comic Sans MS', cursive" font-size="10" fill="#333"
+      transform="rotate(-2 96 117)">☐ Glass jar (cryostat)</text>
+<text x="96" y="131" font-family="'Comic Sans MS', cursive" font-size="10" fill="#333"
+      transform="rotate(-2 96 131)">☐ Liquid helium (~$40/L 😬)</text>
+<text x="96" y="145" font-family="'Comic Sans MS', cursive" font-size="10" fill="#333"
+      transform="rotate(-2 96 145)">☐ Distilled H₂O + NH₃</text>
+<text x="96" y="159" font-family="'Comic Sans MS', cursive" font-size="10" fill="#333"
+      transform="rotate(-2 96 159)">☐ Copper coil (30 AWG)</text>
+<text x="96" y="173" font-family="'Comic Sans MS', cursive" font-size="10" fill="#333"
+      transform="rotate(-2 96 173)">☐ Neodymium magnet x4</text>
+<text x="96" y="187" font-family="'Comic Sans MS', cursive" font-size="10" fill="#333"
+      transform="rotate(-2 96 187)">☐ Asymmetric gear (3D print)</text>
+<text x="96" y="201" font-family="'Comic Sans MS', cursive" font-size="10" fill="#333"
+      transform="rotate(-2 96 201)">☐ Multimeter</text>
+<text x="96" y="215" font-family="'Comic Sans MS', cursive" font-size="10" fill="#333"
+      transform="rotate(-2 96 215)">☐ Arduino (optional logging)</text>
+<text x="96" y="232" font-family="'Comic Sans MS', cursive" font-size="9.5" fill="#888"
+      transform="rotate(-2 96 232)">* output = femtowatts. just saying.</text>
+<text x="96" y="247" font-family="'Comic Sans MS', cursive" font-size="9.5" fill="#c62828"
+      transform="rotate(-2 96 247)">⚠ LHe is COLD. gloves. seriously.</text>
+<text x="96" y="261" font-family="'Comic Sans MS', cursive" font-size="9" fill="#888"
+      transform="rotate(-2 96 261)">budget: ~$200 + dignity</text>
+
+<!-- ══════════════════════════════════════════════════════
+     STEP 1 — CRYOSTAT SKETCH  (hand drawn jar)
+══════════════════════════════════════════════════════ -->
+<text x="298" y="92" font-family="'Comic Sans MS', cursive" font-size="14"
+      fill="#1a237e" font-weight="bold">
+  STEP 1: Build the Cryostat
+</text>
+<!-- Highlighter -->
+<rect x="296" y="80" width="220" height="16" rx="2" fill="url(#hiGreen)" filter="url(#rough)"/>
+<text x="298" y="92" font-family="'Comic Sans MS', cursive" font-size="14"
+      fill="#1a237e" font-weight="bold">STEP 1: Build the Cryostat</text>
+
+<!-- Hand-drawn jar outline (wobbly) -->
+<path d="M 310,115 Q 308,118 308,165 Q 307,230 312,250 Q 316,270 340,275
+          Q 380,282 420,280 Q 448,278 455,265 Q 462,248 462,225
+          Q 463,170 460,130 Q 458,118 456,115 Z"
+      fill="#e8f4fb" stroke="#1565c0" stroke-width="2.2" filter="url(#rough)"
+      fill-opacity="0.7"/>
+
+<!-- Jar lip -->
+<path d="M 306,115 Q 308,108 316,106 Q 380,100 448,106 Q 456,108 458,115"
+      fill="none" stroke="#1565c0" stroke-width="2" filter="url(#rough)"/>
+
+<!-- Liquid helium fill -->
+<path d="M 315,200 Q 314,230 318,250 Q 322,270 340,275
+          Q 380,282 420,280 Q 448,278 455,265 Q 460,248 460,225 L 460,200 Z"
+      fill="#b3e5fc" opacity="0.6" stroke="#0288d1" stroke-width="1"/>
+<text x="380" y="248" text-anchor="middle" font-family="'Comic Sans MS', cursive"
+      font-size="9" fill="#0277bd">liquid He  4.2K</text>
+<!-- LHe surface squiggle -->
+<path d="M 316,200 Q 325,195 335,200 Q 345,205 355,200 Q 365,195 375,200
+          Q 385,205 395,200 Q 405,195 415,200 Q 425,205 435,200 Q 445,195 458,200"
+      fill="none" stroke="#0288d1" stroke-width="1.5"/>
+
+<!-- Inner sample cell (smaller jar) -->
+<path d="M 345,140 Q 344,150 344,180 Q 344,205 347,215 Q 352,225 380,228
+          Q 408,227 415,215 Q 418,205 418,180 Q 418,155 416,140 Z"
+      fill="#e0f7fa" stroke="#00796b" stroke-width="1.8" filter="url(#rough)"
+      fill-opacity="0.8"/>
+<text x="381" y="157" text-anchor="middle" font-family="'Comic Sans MS', cursive"
+      font-size="8.5" fill="#004d40">sample</text>
+<text x="381" y="169" text-anchor="middle" font-family="'Comic Sans MS', cursive"
+      font-size="8.5" fill="#004d40">H₂O+NH₃</text>
+
+<!-- Thermometer drawn in -->
+<line x1="414" y1="138" x2="414" y2="200" stroke="#e53935" stroke-width="2"/>
+<circle cx="414" cy="203" r="6" fill="#e53935"/>
+<text x="422" y="185" font-family="'Comic Sans MS', cursive" font-size="8"
+      fill="#e53935">4.2K ✓</text>
+
+<!-- Annotation arrows -->
+<path d="M 468,165 Q 490,160 510,165" fill="none" stroke="#555" stroke-width="1.5"
+      marker-end="url(#pencilArr)"/>
+<text x="512" y="162" font-family="'Comic Sans MS', cursive" font-size="9" fill="#444">
+  vacuum jacket
+</text>
+<text x="512" y="174" font-family="'Comic Sans MS', cursive" font-size="9" fill="#444">
+  (or just styrofoam lol)
+</text>
+
+<path d="M 468,220 Q 488,220 508,215" fill="none" stroke="#555" stroke-width="1.5"/>
+<text x="510" y="212" font-family="'Comic Sans MS', cursive" font-size="9" fill="#444">LHe bath</text>
+
+<!-- ══════════════════════════════════════════════════════
+     STEP 2 — MOLECULE DIAGRAM  (watercolor blobs)
+══════════════════════════════════════════════════════ -->
+<!-- Highlighter -->
+<rect x="82" y="304" width="210" height="16" rx="2" fill="url(#hiPink)" filter="url(#rough)"/>
+<text x="84" y="316" font-family="'Comic Sans MS', cursive" font-size="14"
+      fill="#880e4f" font-weight="bold">STEP 2: The Molecules</text>
+
+<!-- H2O molecule sketch -->
+<circle cx="155" cy="370" r="22" fill="url(#waterO)" stroke="#00695c" stroke-width="1.8"
+        filter="url(#rough)" opacity="0.85"/>
+<text x="155" y="376" text-anchor="middle" font-family="'Comic Sans MS', cursive"
+      font-size="13" fill="#004d40" font-weight="bold">O</text>
+
+<circle cx="120" cy="392" r="12" fill="url(#waterH)" stroke="#607d8b" stroke-width="1.5"
+        filter="url(#rough)" opacity="0.9"/>
+<text x="120" y="397" text-anchor="middle" font-family="'Comic Sans MS', cursive"
+      font-size="10" fill="#37474f">H</text>
+
+<circle cx="190" cy="392" r="12" fill="url(#waterH)" stroke="#607d8b" stroke-width="1.5"
+        filter="url(#rough)" opacity="0.9"/>
+<text x="190" y="397" text-anchor="middle" font-family="'Comic Sans MS', cursive"
+      font-size="10" fill="#37474f">H</text>
+
+<!-- bonds -->
+<line x1="137" y1="381" x2="126" y2="387" stroke="#37474f" stroke-width="2.5"
+      stroke-linecap="round" filter="url(#sketch)"/>
+<line x1="173" y1="381" x2="182" y2="387" stroke="#37474f" stroke-width="2.5"
+      stroke-linecap="round" filter="url(#sketch)"/>
+
+<text x="155" y="416" text-anchor="middle" font-family="'Comic Sans MS', cursive"
+      font-size="9.5" fill="#444">H₂O  (104.5°)</text>
+
+<!-- NH3 molecule sketch -->
+<circle cx="248" cy="370" r="20" fill="url(#waterN)" stroke="#6a1b9a" stroke-width="1.8"
+        filter="url(#rough)" opacity="0.85"/>
+<text x="248" y="376" text-anchor="middle" font-family="'Comic Sans MS', cursive"
+      font-size="13" fill="#4a148c" font-weight="bold">N</text>
+
+<circle cx="220" cy="390" r="10" fill="url(#waterH)" stroke="#607d8b" stroke-width="1.5"
+        filter="url(#rough)"/>
+<text x="220" y="395" text-anchor="middle" font-family="'Comic Sans MS', cursive"
+      font-size="9" fill="#37474f">H</text>
+<circle cx="248" cy="395" r="10" fill="url(#waterH)" stroke="#607d8b" stroke-width="1.5"
+        filter="url(#rough)"/>
+<text x="248" y="400" text-anchor="middle" font-family="'Comic Sans MS', cursive"
+      font-size="9" fill="#37474f">H</text>
+<circle cx="275" cy="390" r="10" fill="url(#waterH)" stroke="#607d8b" stroke-width="1.5"
+        filter="url(#rough)"/>
+<text x="275" y="395" text-anchor="middle" font-family="'Comic Sans MS', cursive"
+      font-size="9" fill="#37474f">H</text>
+
+<line x1="232" y1="381" x2="225" y2="387" stroke="#4a148c" stroke-width="2" filter="url(#sketch)"/>
+<line x1="248" y1="380" x2="248" y2="388" stroke="#4a148c" stroke-width="2" filter="url(#sketch)"/>
+<line x1="264" y1="381" x2="270" y2="387" stroke="#4a148c" stroke-width="2" filter="url(#sketch)"/>
+
+<text x="248" y="416" text-anchor="middle" font-family="'Comic Sans MS', cursive"
+      font-size="9.5" fill="#444">NH₃  (trigonal)</text>
+
+<!-- H-bond and tunnel arrow between molecules -->
+<path d="M 202,380 Q 218,372 230,376" fill="none" stroke="#ff6f00" stroke-width="2"
+      stroke-dasharray="5,3" filter="url(#sketch)"/>
+<text x="216" y="368" text-anchor="middle" font-family="'Comic Sans MS', cursive"
+      font-size="9" fill="#e65100">H-bond</text>
+
+<!-- Tunneling proton pop -->
+<circle cx="212" cy="382" r="5" fill="#ff9800" opacity="0.85" class="tunnel-pop"
+        filter="url(#sketch)"/>
+<path d="M 205,390 Q 216,402 228,392" fill="none" stroke="#ff6f00" stroke-width="1.8"
+      marker-end="url(#pencilArr2)"/>
+<text x="216" y="410" text-anchor="middle" font-family="'Comic Sans MS', cursive"
+      font-size="9" fill="#e65100">H⁺ tunnels!</text>
+<text x="216" y="422" text-anchor="middle" font-family="'Comic Sans MS', cursive"
+      font-size="8.5" fill="#bf360c">(~150 femtosec)</text>
+
+<!-- sticky note annotation -->
+<g transform="rotate(3 82 436)" filter="url(#lightShadow)">
+  <rect x="82" y="434" width="188" height="82" rx="3" fill="url(#pinkNote)"/>
+  <rect x="142" y="430" width="55" height="12" rx="2" fill="url(#tapeGrad)" opacity="0.85"/>
+</g>
+<text x="94" y="452" font-family="'Comic Sans MS', cursive" font-size="9.5"
+      fill="#880e4f" font-weight="bold" transform="rotate(3 94 452)">why does it tunnel??</text>
+<text x="94" y="465" font-family="'Comic Sans MS', cursive" font-size="9"
+      fill="#444" transform="rotate(3 94 465)">at 4.2K, zero-point energy</text>
+<text x="94" y="477" font-family="'Comic Sans MS', cursive" font-size="9"
+      fill="#444" transform="rotate(3 94 477)">of proton &gt; thermal energy.</text>
+<text x="94" y="489" font-family="'Comic Sans MS', cursive" font-size="9"
+      fill="#444" transform="rotate(3 94 489)">wave goes THROUGH barrier.</text>
+<text x="94" y="502" font-family="'Comic Sans MS', cursive" font-size="9"
+      fill="#880e4f" transform="rotate(3 94 502)">spooky but verified ✓</text>
+
+
+<!-- ══════════════════════════════════════════════════════
+     STEP 3 — BARRIER DIAGRAM  (hand-drawn potential well)
+══════════════════════════════════════════════════════ -->
+<rect x="296" y="304" width="200" height="16" rx="2" fill="url(#hiYellow)" filter="url(#rough)"/>
+<text x="298" y="316" font-family="'Comic Sans MS', cursive" font-size="14"
+      fill="#1a237e" font-weight="bold">STEP 3: The Barrier</text>
+
+<!-- axes (wobbly) -->
+<path d="M 308,440 Q 308,438 308,330" fill="none" stroke="#333" stroke-width="1.8"
+      marker-end="url(#pencilArr)" filter="url(#sketch)"/>
+<path d="M 300,430 Q 305,432 530,432" fill="none" stroke="#333" stroke-width="1.8"
+      marker-end="url(#pencilArr)" filter="url(#sketch)"/>
+<text x="302" y="326" font-family="'Comic Sans MS', cursive" font-size="9" fill="#333">V(x)</text>
+<text x="532" y="435" font-family="'Comic Sans MS', cursive" font-size="9" fill="#333">x</text>
+
+<!-- Potential barrier walls (wobbly rectangles) -->
+<path d="M 370,430 L 370,355 L 420,355 L 420,430" fill="#ffccbc" stroke="#e64a19"
+      stroke-width="2.2" filter="url(#rough)" fill-opacity="0.7"/>
+<text x="395" y="347" text-anchor="middle" font-family="'Comic Sans MS', cursive"
+      font-size="9.5" fill="#bf360c">V₀ = 0.3eV</text>
+<text x="395" y="358" text-anchor="middle" font-family="'Comic Sans MS', cursive"
+      font-size="9" fill="#bf360c">←0.8Å→</text>
+
+<!-- Incident wave -->
+<path d="M 315,400 Q 323,385 331,400 Q 339,415 347,400 Q 355,385 363,400 Q 367,408 370,408"
+      fill="none" stroke="#1565c0" stroke-width="2.2" filter="url(#sketch)"/>
+
+<!-- Evanescent decay inside barrier -->
+<path d="M 370,408 Q 385,415 400,420 Q 412,424 420,426"
+      fill="none" stroke="#1565c0" stroke-width="2" stroke-dasharray="5,3"
+      filter="url(#sketch)" opacity="0.7"/>
+
+<!-- Transmitted wave (smaller) -->
+<path d="M 420,426 Q 428,418 436,426 Q 444,434 452,424 Q 460,414 468,422 Q 476,430 484,422"
+      fill="none" stroke="#6a1b9a" stroke-width="1.8" filter="url(#sketch)" opacity="0.8"/>
+
+<!-- Particle E level line -->
+<line x1="312" y1="400" x2="525" y2="400" stroke="#e53935" stroke-width="1.2"
+      stroke-dasharray="8,4" opacity="0.7"/>
+<text x="527" y="403" font-family="'Comic Sans MS', cursive" font-size="9"
+      fill="#e53935">E</text>
+
+<!-- Annotations -->
+<path d="M 340,363 Q 348,348 360,345" fill="none" stroke="#555" stroke-width="1.2"
+      filter="url(#sketch)"/>
+<text x="315" y="360" font-family="'Comic Sans MS', cursive" font-size="8.5"
+      fill="#1565c0">incoming ψ</text>
+
+<path d="M 460,408 Q 472,398 482,402" fill="none" stroke="#555" stroke-width="1.2"
+      filter="url(#sketch)"/>
+<text x="485" y="400" font-family="'Comic Sans MS', cursive" font-size="8.5"
+      fill="#6a1b9a">tunneled ψ</text>
+
+<!-- DWELL zone bracket -->
+<path d="M 370,440 L 370,447 L 420,447 L 420,440" fill="none" stroke="#ff6f00"
+      stroke-width="1.5"/>
+<text x="395" y="457" text-anchor="middle" font-family="'Comic Sans MS', cursive"
+      font-size="9" fill="#e65100">← DWELL ZONE →</text>
+<text x="395" y="467" text-anchor="middle" font-family="'Comic Sans MS', cursive"
+      font-size="8.5" fill="#bf360c">extract work HERE!</text>
+
+<!-- Curly brace / scribble pointing to dwell zone -->
+<path d="M 395,475 Q 397,490 400,500" fill="none" stroke="#e65100"
+      stroke-width="1.5" marker-end="url(#pencilArr2)"/>
+
+<!-- ══════════════════════════════════════════════════════
+     STEP 4 — RATCHET GEAR SKETCH  (center)
+══════════════════════════════════════════════════════ -->
+<rect x="540" y="80" width="200" height="16" rx="2" fill="url(#hiGreen)" filter="url(#rough)"/>
+<text x="542" y="92" font-family="'Comic Sans MS', cursive" font-size="14"
+      fill="#1b5e20" font-weight="bold">STEP 4: The Ratchet Gear</text>
+
+<!-- Gear housing circle (hand-drawn wobbly) -->
+<path d="M 640,320 m -105,0 a 105,105 0 1,0 210,0 a 105,105 0 1,0 -210,0"
+      fill="#fafafa" stroke="#424242" stroke-width="2.5" filter="url(#rough)"
+      fill-opacity="0.6"/>
+
+<!-- Ratchet teeth (asymmetric, hand drawn) -->
+<g class="ratchet">
+  <!-- 8 sawtooth teeth -->
+  <path d="M 640,320 L 670,238 L 677,255 Z" fill="#5d4037" stroke="#3e2723" stroke-width="1.2"/>
+  <path d="M 640,320 L 714,268 L 718,287 Z" fill="#5d4037" stroke="#3e2723" stroke-width="1.2"/>
+  <path d="M 640,320 L 740,320 L 738,340 Z" fill="#5d4037" stroke="#3e2723" stroke-width="1.2"/>
+  <path d="M 640,320 L 714,372 L 705,388 Z" fill="#5d4037" stroke="#3e2723" stroke-width="1.2"/>
+  <path d="M 640,320 L 670,402 L 653,412 Z" fill="#5d4037" stroke="#3e2723" stroke-width="1.2"/>
+  <path d="M 640,320 L 608,408 L 594,400 Z" fill="#5d4037" stroke="#3e2723" stroke-width="1.2"/>
+  <path d="M 640,320 L 566,372 L 563,354 Z" fill="#5d4037" stroke="#3e2723" stroke-width="1.2"/>
+  <path d="M 640,320 L 542,268 L 558,260 Z" fill="#5d4037" stroke="#3e2723" stroke-width="1.2"/>
+
+  <!-- Inner disk -->
+  <circle cx="640" cy="320" r="42" fill="#eceff1" stroke="#616161" stroke-width="2"
+          filter="url(#rough)"/>
+  <!-- Shaft hole -->
+  <circle cx="640" cy="320" r="14" fill="#b0bec5" stroke="#546e7a" stroke-width="2"/>
+  <!-- Axle cross -->
+  <line x1="626" y1="320" x2="654" y2="320" stroke="#546e7a" stroke-width="3"/>
+  <line x1="640" y1="306" x2="640" y2="334" stroke="#546e7a" stroke-width="3"/>
+</g>
+
+<!-- Rotation arrow -->
+<path d="M 700,265 Q 745,290 748,330" fill="none" stroke="#1b5e20" stroke-width="2"
+      marker-end="url(#pencilArr3)" filter="url(#sketch)"/>
+<text x="752" y="308" font-family="'Comic Sans MS', cursive" font-size="10"
+      fill="#1b5e20">spins!</text>
+<text x="752" y="320" font-family="'Comic Sans MS', cursive" font-size="9"
+      fill="#33691e">one way only ↻</text>
+
+<!-- Asymmetry annotation -->
+<path d="M 680,235 Q 695,215 712,210" fill="none" stroke="#e53935" stroke-width="1.5"
+      filter="url(#sketch)"/>
+<text x="714" y="207" font-family="'Comic Sans MS', cursive" font-size="8.5"
+      fill="#c62828">steep side</text>
+<path d="M 670,240 Q 660,218 650,210" fill="none" stroke="#1565c0" stroke-width="1.5"
+      filter="url(#sketch)"/>
+<text x="600" y="207" font-family="'Comic Sans MS', cursive" font-size="8.5"
+      fill="#1565c0">gradual side</text>
+
+<!-- 3D printing note -->
+<g transform="rotate(4 545 420)">
+  <rect x="545" y="420" width="160" height="56" rx="3" fill="url(#blueNote)"
+        filter="url(#lightShadow)"/>
+  <rect x="595" y="416" width="50" height="12" rx="2" fill="url(#tapeGrad)" opacity="0.85"/>
+</g>
+<text x="557" y="438" font-family="'Comic Sans MS', cursive" font-size="9.5"
+      fill="#0d47a1" font-weight="bold" transform="rotate(4 557 438)">3D print the gear!</text>
+<text x="557" y="451" font-family="'Comic Sans MS', cursive" font-size="9"
+      fill="#333" transform="rotate(4 557 451)">STL file: sawtooth_ratchet_v3</text>
+<text x="557" y="463" font-family="'Comic Sans MS', cursive" font-size="9"
+      fill="#333" transform="rotate(4 557 463)">material: PLA or brass</text>
+<text x="557" y="475" font-family="'Comic Sans MS', cursive" font-size="9"
+      fill="#888" transform="rotate(4 557 475)">(brass survives cryo better)</text>
+
+<!-- ══════════════════════════════════════════════════════
+     STEP 5 — COIL + WIRING SKETCH
+══════════════════════════════════════════════════════ -->
+<rect x="760" y="80" width="248" height="16" rx="2" fill="url(#hiPink)" filter="url(#rough)"/>
+<text x="762" y="92" font-family="'Comic Sans MS', cursive" font-size="14"
+      fill="#880e4f" font-weight="bold">STEP 5: Coil + Output</text>
+
+<!-- Coil drawing (wobbly loops) -->
+<path d="M 780,130 Q 795,118 810,130 Q 825,142 840,130 Q 855,118 870,130
+          Q 885,142 900,130 Q 915,118 930,130 Q 945,142 960,130 Q 975,118 990,130"
+      fill="none" stroke="#b8860b" stroke-width="4" stroke-linecap="round"
+      filter="url(#rough)"/>
+<path d="M 780,145 Q 795,133 810,145 Q 825,157 840,145 Q 855,133 870,145
+          Q 885,157 900,145 Q 915,133 930,145 Q 945,157 960,145 Q 975,133 990,145"
+      fill="none" stroke="#b8860b" stroke-width="4" stroke-linecap="round"
+      filter="url(#rough)" opacity="0.7"/>
+<text x="885" y="165" text-anchor="middle" font-family="'Comic Sans MS', cursive"
+      font-size="9.5" fill="#8d6e63">copper coil  (30 AWG, 200 turns)</text>
+
+<!-- Magnet blocks -->
+<rect x="775" y="170" width="45" height="30" rx="3" fill="#ef9a9a" stroke="#c62828"
+      stroke-width="1.8" filter="url(#rough)"/>
+<text x="797" y="190" text-anchor="middle" font-family="'Comic Sans MS', cursive"
+      font-size="10" fill="#b71c1c" font-weight="bold">N</text>
+<rect x="960" y="170" width="45" height="30" rx="3" fill="#90caf9" stroke="#1565c0"
+      stroke-width="1.8" filter="url(#rough)"/>
+<text x="982" y="190" text-anchor="middle" font-family="'Comic Sans MS', cursive"
+      font-size="10" fill="#0d47a1" font-weight="bold">S</text>
+<text x="885" y="192" text-anchor="middle" font-family="'Comic Sans MS', cursive"
+      font-size="9" fill="#555">← neodymium magnets →</text>
+
+<!-- Wires out -->
+<path d="M 780,138 L 770,138 L 770,230" fill="none" stroke="#f9a825" stroke-width="3"
+      stroke-linecap="round" filter="url(#rough)" class="current"/>
+<path d="M 990,138 L 1000,138 L 1000,230" fill="none" stroke="#f9a825" stroke-width="3"
+      stroke-linecap="round" filter="url(#rough)" class="current"/>
+<path d="M 770,230 L 1000,230" fill="none" stroke="#f9a825" stroke-width="3"
+      stroke-linecap="round" filter="url(#rough)" class="current"/>
+
+<!-- Multimeter sketch -->
+<rect x="850" y="230" width="80" height="60" rx="6" fill="#fafafa" stroke="#424242"
+      stroke-width="2" filter="url(#rough)"/>
+<rect x="858" y="237" width="64" height="32" rx="3" fill="#b2dfdb" stroke="#546e7a"
+      stroke-width="1.2"/>
+<text x="890" y="258" text-anchor="middle" font-family="'Comic Sans MS', cursive"
+      font-size="11" fill="#004d40" font-weight="bold" class="blink">0.003μV</text>
+<circle cx="865" cy="278" r="5" fill="#e53935" stroke="#b71c1c" stroke-width="1"/>
+<circle cx="880" cy="278" r="5" fill="#333" stroke="#111" stroke-width="1"/>
+<text x="890" y="244" text-anchor="middle" font-family="'Comic Sans MS', cursive"
+      font-size="7" fill="#546e7a">MULTIMETER</text>
+
+<!-- Probe wires to multimeter -->
+<path d="M 770,230 Q 800,230 850,255" fill="none" stroke="#e53935" stroke-width="1.8"
+      filter="url(#rough)"/>
+<path d="M 1000,230 Q 970,230 895,272" fill="none" stroke="#333" stroke-width="1.8"
+      filter="url(#rough)"/>
+
+<!-- Output annotation -->
+<text x="885" y="305" text-anchor="middle" font-family="'Comic Sans MS', cursive"
+      font-size="9.5" fill="#444">output ≈ femtowatts</text>
+<text x="885" y="318" text-anchor="middle" font-family="'Comic Sans MS', cursive"
+      font-size="9.5" fill="#444">(real, measurable, tiny)</text>
+
+<!-- ══════════════════════════════════════════════════════
+     MAIN ASSEMBLY DIAGRAM  (bottom center)
+══════════════════════════════════════════════════════ -->
+<rect x="296" y="500" width="648" height="16" rx="2" fill="url(#hiYellow)" filter="url(#rough)"/>
+<text x="298" y="512" font-family="'Comic Sans MS', cursive" font-size="14"
+      fill="#1a237e" font-weight="bold">FULL ASSEMBLY — how it all connects</text>
+
+<!-- Assembly flow diagram -->
+<!-- Box 1: Cryostat -->
+<rect x="298" y="522" width="110" height="50" rx="5" fill="#e3f2fd" stroke="#1565c0"
+      stroke-width="2" filter="url(#rough)"/>
+<text x="353" y="543" text-anchor="middle" font-family="'Comic Sans MS', cursive"
+      font-size="10" fill="#0d47a1" font-weight="bold">CRYOSTAT</text>
+<text x="353" y="556" text-anchor="middle" font-family="'Comic Sans MS', cursive"
+      font-size="8.5" fill="#1565c0">H₂O + NH₃</text>
+<text x="353" y="567" text-anchor="middle" font-family="'Comic Sans MS', cursive"
+      font-size="8.5" fill="#1565c0">@ 4.2 K</text>
+
+<!-- Arrow 1 -->
+<path d="M 410,547 Q 438,547 452,547" fill="none" stroke="#333" stroke-width="2"
+      marker-end="url(#pencilArr)" filter="url(#sketch)"/>
+<text x="430" y="540" text-anchor="middle" font-family="'Comic Sans MS', cursive"
+      font-size="8.5" fill="#e65100">H⁺ tunnel</text>
+<text x="430" y="558" text-anchor="middle" font-family="'Comic Sans MS', cursive"
+      font-size="8" fill="#e65100">current</text>
+
+<!-- Box 2: Barrier zone -->
+<rect x="454" y="522" width="110" height="50" rx="5" fill="#fff3e0" stroke="#e65100"
+      stroke-width="2" filter="url(#rough)"/>
+<text x="509" y="540" text-anchor="middle" font-family="'Comic Sans MS', cursive"
+      font-size="10" fill="#bf360c" font-weight="bold">BARRIER</text>
+<text x="509" y="553" text-anchor="middle" font-family="'Comic Sans MS', cursive"
+      font-size="8.5" fill="#e65100">dwell zone</text>
+<text x="509" y="566" text-anchor="middle" font-family="'Comic Sans MS', cursive"
+      font-size="8.5" fill="#e65100">work extracted!</text>
+
+<!-- Arrow 2 -->
+<path d="M 566,547 Q 594,547 608,547" fill="none" stroke="#333" stroke-width="2"
+      marker-end="url(#pencilArr)" filter="url(#sketch)"/>
+<text x="587" y="540" text-anchor="middle" font-family="'Comic Sans MS', cursive"
+      font-size="8.5" fill="#1b5e20">mech.</text>
+<text x="587" y="558" text-anchor="middle" font-family="'Comic Sans MS', cursive"
+      font-size="8" fill="#1b5e20">torque</text>
+
+<!-- Box 3: Ratchet -->
+<rect x="610" y="522" width="110" height="50" rx="5" fill="#e8f5e9" stroke="#2e7d32"
+      stroke-width="2" filter="url(#rough)"/>
+<text x="665" y="540" text-anchor="middle" font-family="'Comic Sans MS', cursive"
+      font-size="10" fill="#1b5e20" font-weight="bold">RATCHET</text>
+<text x="665" y="553" text-anchor="middle" font-family="'Comic Sans MS', cursive"
+      font-size="8.5" fill="#2e7d32">sawtooth gear</text>
+<text x="665" y="566" text-anchor="middle" font-family="'Comic Sans MS', cursive"
+      font-size="8.5" fill="#2e7d32">unidirectional ↻</text>
+
+<!-- Arrow 3 -->
+<path d="M 722,547 Q 750,547 764,547" fill="none" stroke="#333" stroke-width="2"
+      marker-end="url(#pencilArr)" filter="url(#sketch)"/>
+<text x="743" y="540" text-anchor="middle" font-family="'Comic Sans MS', cursive"
+      font-size="8.5" fill="#880e4f">EMF</text>
+
+<!-- Box 4: Output -->
+<rect x="766" y="522" width="110" height="50" rx="5" fill="#fce4ec" stroke="#880e4f"
+      stroke-width="2" filter="url(#rough)"/>
+<text x="821" y="540" text-anchor="middle" font-family="'Comic Sans MS', cursive"
+      font-size="10" fill="#880e4f" font-weight="bold">OUTPUT</text>
+<text x="821" y="553" text-anchor="middle" font-family="'Comic Sans MS', cursive"
+      font-size="8.5" fill="#ad1457">coil + magnets</text>
+<text x="821" y="566" text-anchor="middle" font-family="'Comic Sans MS', cursive"
+      font-size="8.5" fill="#ad1457">~femtowatts ⚡</text>
+
+<!-- Connecting zigzag bottom wire decoration -->
+<path d="M 298,590 Q 330,582 353,590 Q 376,598 409,590 Q 442,582 509,590
+          Q 576,598 610,590 Q 644,582 665,590 Q 686,598 720,590 Q 754,582 821,590 Q 876,598 900,590"
+      fill="none" stroke="#ffb300" stroke-width="1.5" opacity="0.5" filter="url(#sketch)"/>
+
+<!-- ══════════════════════════════════════════════════════
+     BOTTOM NOTES STRIP
+══════════════════════════════════════════════════════ -->
+<!-- Green sticky note bottom left -->
+<g transform="rotate(-1.5 82 612)" filter="url(#noteShadow)">
+  <rect x="82" y="612" width="220" height="140" rx="3" fill="url(#greenNote)"/>
+  <rect x="158" y="608" width="55" height="12" rx="2" fill="url(#tapeGrad)" opacity="0.85"/>
+</g>
+<text x="96" y="632" font-family="'Comic Sans MS', cursive" font-size="10.5"
+      fill="#1b5e20" font-weight="bold" transform="rotate(-1.5 96 632)">⚡ REALITY CHECK</text>
+<text x="96" y="648" font-family="'Comic Sans MS', cursive" font-size="9.5"
+      fill="#333" transform="rotate(-1.5 96 648)">Output is TINY. Like, really.</text>
+<text x="96" y="662" font-family="'Comic Sans MS', cursive" font-size="9.5"
+      fill="#333" transform="rotate(-1.5 96 662)">P ≈ 10⁻¹⁵ W per molecule.</text>
+<text x="96" y="676" font-family="'Comic Sans MS', cursive" font-size="9.5"
+      fill="#333" transform="rotate(-1.5 96 676)">Scale up: 10²³ molecules</text>
+<text x="96" y="690" font-family="'Comic Sans MS', cursive" font-size="9.5"
+      fill="#333" transform="rotate(-1.5 96 690)">→ ~μW range maybe?</text>
+<text x="96" y="704" font-family="'Comic Sans MS', cursive" font-size="9.5"
+      fill="#2e7d32" transform="rotate(-1.5 96 704)">Josephson junctions already</text>
+<text x="96" y="718" font-family="'Comic Sans MS', cursive" font-size="9.5"
+      fill="#2e7d32" transform="rotate(-1.5 96 718)">do this commercially ✓</text>
+<text x="96" y="735" font-family="'Comic Sans MS', cursive" font-size="9"
+      fill="#888" transform="rotate(-1.5 96 735)">2nd law still holds (barely lol)</text>
+
+<!-- Formula scrawl bottom center -->
+<rect x="315" y="618" width="330" height="16" rx="2" fill="url(#hiYellow)" filter="url(#rough)"/>
+<text x="317" y="630" font-family="'Comic Sans MS', cursive" font-size="13.5"
+      fill="#1a237e" font-weight="bold">Key equations (don't lose this page)</text>
+
+<text x="317" y="652" font-family="'Comic Sans MS', cursive" font-size="11" fill="#333">
+  T = e^(−2κL)   where  κ = √(2m(V₀−E)) / ℏ
+</text>
+<text x="317" y="670" font-family="'Comic Sans MS', cursive" font-size="11" fill="#333">
+  τ_dwell ≈ ℏ / (V₀ − E)   ≈  150 femtoseconds
+</text>
+<text x="317" y="688" font-family="'Comic Sans MS', cursive" font-size="11" fill="#333">
+  J_net = (k₊ − k₋) · e    [asymmetric ratchet]
+</text>
+<text x="317" y="706" font-family="'Comic Sans MS', cursive" font-size="11" fill="#333">
+  W_max = kT · ln2  per tunneling event (Landauer)
+</text>
+<text x="317" y="724" font-family="'Comic Sans MS', cursive" font-size="11" fill="#880e4f">
+  P_out ≈ J · ΔV   →   check with multimeter!
+</text>
+
+<!-- Doodle lightning bolt -->
+<path d="M 655,622 L 645,648 L 655,648 L 642,675"
+      fill="none" stroke="#f9a825" stroke-width="3" stroke-linejoin="round"
+      filter="url(#rough)"/>
+<path d="M 675,622 L 665,648 L 675,648 L 662,675"
+      fill="none" stroke="#f9a825" stroke-width="3" stroke-linejoin="round"
+      filter="url(#rough)"/>
+
+<!-- Bottom right — "to do" note -->
+<g transform="rotate(2 660 610)" filter="url(#noteShadow)">
+  <rect x="660" y="610" width="200" height="148" rx="3" fill="url(#yellowNote)"/>
+  <rect x="720" y="606" width="55" height="12" rx="2" fill="url(#tapeGrad)" opacity="0.85"/>
+</g>
+<text x="675" y="630" font-family="'Comic Sans MS', cursive" font-size="10.5"
+      fill="#e65100" font-weight="bold" transform="rotate(2 675 630)">TODO:</text>
+<text x="675" y="646" font-family="'Comic Sans MS', cursive" font-size="9.5"
+      fill="#333" transform="rotate(2 675 646)">☐ order liquid helium dewar</text>
+<text x="675" y="660" font-family="'Comic Sans MS', cursive" font-size="9.5"
+      fill="#333" transform="rotate(2 675 660)">☐ 3D print ratchet gear STL</text>
+<text x="675" y="674" font-family="'Comic Sans MS', cursive" font-size="9.5"
+      fill="#333" transform="rotate(2 675 674)">☐ wind 200-turn coil</text>
+<text x="675" y="688" font-family="'Comic Sans MS', cursive" font-size="9.5"
+      fill="#333" transform="rotate(2 675 688)">☐ calibrate multimeter</text>
+<text x="675" y="702" font-family="'Comic Sans MS', cursive" font-size="9.5"
+      fill="#333" transform="rotate(2 675 702)">☐ convince someone this works</text>
+<text x="675" y="716" font-family="'Comic Sans MS', cursive" font-size="9.5"
+      fill="#333" transform="rotate(2 675 716)">☒ understand the physics ✓</text>
+<text x="675" y="730" font-family="'Comic Sans MS', cursive" font-size="9"
+      fill="#c62828" transform="rotate(2 675 730)">⚠ DON'T spill liquid helium</text>
+<text x="675" y="743" font-family="'Comic Sans MS', cursive" font-size="9"
+      fill="#c62828" transform="rotate(2 675 743)">   it evaporates fast and</text>
+<text x="675" y="756" font-family="'Comic Sans MS', cursive" font-size="9"
+      fill="#c62828" transform="rotate(2 675 756)">   your fingers will regret it</text>
+
+<!-- ══════════ MARKERS ══════════ -->
+<defs>
+  <marker id="pencilArr" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+    <path d="M0,0 L8,4 L0,8 L2,4 Z" fill="#333"/>
+  </marker>
+  <marker id="pencilArr2" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+    <path d="M0,0 L8,4 L0,8 L2,4 Z" fill="#e65100"/>
+  </marker>
+  <marker id="pencilArr3" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+    <path d="M0,0 L8,4 L0,8 L2,4 Z" fill="#1b5e20"/>
+  </marker>
+</defs>
+
+<!-- Page number -->
+<text x="1020" y="788" font-family="'Comic Sans MS', cursive" font-size="11"
+      fill="#aaa">— 47 —</text>
+
+<!-- Coffee ring stain (authenticity!) -->
+<circle cx="955" cy="490" r="38" fill="none" stroke="#c8a87a" stroke-width="3"
+        opacity="0.25" filter="url(#rough)"/>
+<circle cx="955" cy="490" r="34" fill="none" stroke="#c8a87a" stroke-width="1"
+        opacity="0.15" filter="url(#rough)"/>
+<text x="955" y="494" text-anchor="middle" font-family="'Comic Sans MS', cursive"
+      font-size="8" fill="#c8a87a" opacity="0.5">coffee :(</text>
+
+</svg>
