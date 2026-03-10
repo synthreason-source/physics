@@ -269,7 +269,7 @@ fig.suptitle(
     color='white', fontsize=14, fontweight='bold', y=0.98
 )
 
-plt.savefig('/mnt/user-data/outputs/nano_watermill_simulation.png',
+plt.savefig('nano_watermill_simulation.png',
             dpi=160, bbox_inches='tight', facecolor='#0A0E1A')
 print("Saved: nano_watermill_simulation.png")
 plt.close()
