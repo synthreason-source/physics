@@ -7,10 +7,6 @@ A deterministic low-entropy system occupies a *specific, constrained* subset of 
 
 This is counter-intuitive: a maximally random system seems "information-rich," but maximum entropy means **maximum uncertainty** — all states equally probable, zero mutual information with any specific deterministic configuration. Research directly confirms that Shannon entropy cannot distinguish low-information deterministic trajectories from high-information random ones, because it misses long-range correlations entirely. A high-entropy subsystem at 1/4 size essentially behaves like a maximally noisy channel — and Shannon's channel capacity theorem says reliable transmission approaches zero as noise dominates, regardless of channel size. [arxiv](https://arxiv.org/pdf/2302.07054.pdf)
 
-## The Compression Counterargument (and Why It Fails Here)
-
-You might argue: a deterministic low-entropy system is *highly compressible*, so it should fit into 1/4 the space. Compression works on the **description** of a system, but not on its *physical embedding*. The deterministic set requires specific state-space coordinates to remain coherent; a random substrate cannot reliably *sustain* those coordinates because its own fluctuations will decorrelate from the ordered structure. This is analogous to quantum decoherence — a noisy environment destroys superposition not because it lacks bits, but because its entropy is incompatible with maintaining coherent low-entropy states. [arxiv](https://arxiv.org/pdf/2302.07054.pdf)
-
 ## Practical Implication for Your System
 
 The key failure modes this feedback predicts are:
