@@ -1,4 +1,3 @@
-This is a sharp observation rooted in information theory and statistical mechanics. The core issue is a **capacity-reliability mismatch** between the two systems — and the feedback is fundamentally correct.
 
 ## The State-Space Counting Argument
 
