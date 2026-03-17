@@ -16,5 +16,3 @@ The key failure modes this feedback predicts are:
 - **Effective degrees of freedom mismatch**: Even if raw bit count seems sufficient, the *typicality* argument from AEP shows that 2^(N·H(X)) typical sequences dominate at size N/4, swamping the small deterministic island [arxiv](https://arxiv.org/html/2206.07867v3)
 
 The fix generally requires either increasing the substrate size to match the deterministic system's constraint dimensionality, or introducing a low-entropy (structured) buffer layer between the random and deterministic subsystems — essentially a thermodynamic insulator in information-theoretic terms.
-
-What's the architecture of the system in question — is this a physical simulation, a quantum state representation, or something like a random hash/embedding trying to preserve deterministic structure?
