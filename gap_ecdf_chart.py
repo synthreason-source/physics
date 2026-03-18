@@ -25,7 +25,7 @@ from scipy.stats import kstest
 # ─── CLI ──────────────────────────────────────────────────────────────────────
 parser = argparse.ArgumentParser()
 parser.add_argument("--budget", type=int,       default=15_000_000)
-parser.add_argument("--diff",   type=int, nargs="+", default=[8,12,16,24,28])
+parser.add_argument("--diff",   type=int, nargs="+", default=[16,17,18,19,20,21,22,23,24,25,26,27,28])
 parser.add_argument("--header", type=str,       default="PROTO_BLOCK_v1")
 parser.add_argument("--out",    type=str,       default="gap_ecdf.html")
 args = parser.parse_args()
