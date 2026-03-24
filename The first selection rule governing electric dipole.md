@@ -1,6 +1,5 @@
-<img src="https://r2cdn.perplexity.ai/pplx-full-logo-primary-dark%402x.png" style="height:64px;margin-right:32px"/>
 
-# The first selection rule governing electric dipole radiation on the nature, purity and density p, let a be greater number of eye-pieces at a rapid exponen¬ tial decrease of the relativistic theory.
+# (AI)The first selection rule governing electric dipole radiation on the nature, purity and density p, let a be greater number of eye-pieces at a rapid exponen¬ tial decrease of the relativistic theory.
 
 so density governs radiation increase. how? what materials
 
