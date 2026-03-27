@@ -66,19 +66,18 @@ struct MerkleBranch : public std::vector<String> {
         return *this;
     }
 };
-
-// ── Pool job data ─────────────────────────────────────────────────────────────
-typedef struct {
-    String       id;
-    String       prevhash;
-    String       coinb1;
-    String       coinb2;
-    String       version;
-    String       nbits;
-    String       ntime;
-    bool         clean_jobs;
-    MerkleBranch merkle_branch;  // supports: job.merkle_branch = json["params"][4]
-} pool_job_data_t;
+struct pool_job_data_t {
+    String   id;
+    String   coinb1;
+    String   coinb2;
+    String   prevhash;
+    String   version;
+    String   nbits;
+    String   ntime;
+    std::vector<String> merkle_branch;
+    bool     clean_jobs;          // <-- add this
+    uint32_t starting_nonce;      // <-- already added from last round
+};
 
 // ── Per-message response record ───────────────────────────────────────────────
 // thread_entry.cpp accesses rsp.stamp; we keep both ts_ms and stamp.

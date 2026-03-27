@@ -86,6 +86,8 @@ esp_err_t AsicMinerClass::listen_asic_rsp(miner_result *result, uint32_t timeout
 bool AsicMinerClass::mining(pool_job_data_t *pool_job){
     if(this->_asic == NULL) return false;
     ////////////////////////////////////////construct asic job//////////////////////////////////
+    
+    
     uint8_t step = 8;
     if(g_board.info.spec.asic.name == CHIP_NMAXE_NAME)                  step = 8;
     else if (g_board.info.spec.asic.name == CHIP_NMAXE_GAMMA_NAME)      step = 24;
@@ -134,8 +136,7 @@ bool AsicMinerClass::mining(pool_job_data_t *pool_job){
 
     *(uint32_t*)this->_asic_job_now.ntime           = strtoul(pool_job->ntime.c_str(), NULL, 16);
     *(uint32_t*)this->_asic_job_now.nbits           = strtoul(pool_job->nbits.c_str(), NULL, 16);
-    *(uint32_t*)this->_asic_job_now.starting_nonce  = 0x00000000;
-    this->_asic_job_map[this->_asic_job_now.id]     = this->_asic_job_now;
+*(uint32_t*)this->_asic_job_now.starting_nonce = pool_job->starting_nonce;    this->_asic_job_map[this->_asic_job_now.id]     = this->_asic_job_now;
     this->_extranonce2_map[this->_asic_job_now.id]  = extranonce2;
 
     LOG_D("ASIC job [%03d] with ext2 [%s]", this->_asic_job_now.id, extranonce2.c_str());
