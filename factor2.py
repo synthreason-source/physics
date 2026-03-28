@@ -1,97 +1,148 @@
+import os
+import subprocess
+
+# Ensure required libraries are installed
+subprocess.run("pip install qiskit qiskit-aer pylatexenc -q", shell=True)
+
 import numpy as np
-import pandas as pd
 import matplotlib.pyplot as plt
+from qiskit import QuantumCircuit, transpile
+from qiskit_aer import AerSimulator
+from qiskit.visualization import plot_histogram
+import math
 
-# The "curve" in the metamaterial simulation is the hyperbola defined by x * y = N.
-# We can calculate all primes up to a certain limit by checking if this continuous curve 
-# intersects any discrete integer coordinates (x, y) where x > 1 and y > 1.
+os.makedirs('output', exist_ok=True)
 
-def calculate_primes_via_curve(limit):
-    primes = []
-    # We will also keep track of the intersections for visualization
-    intersections = {}
+def run_auto_quantum_sieve(N_target, shots=4000):
+    # -------------------------------------------------------------------------
+    # 1. AUTO-ALLOCATE QUBITS
+    # -------------------------------------------------------------------------
+    # Automatically determine required grid size based on binary length
+    m = N_target.bit_length()
+    total_q = 2 * m
     
-    for N in range(2, limit + 1):
-        is_prime = True
-        curve_points = []
+    print(f"--- FACTORING N = {N_target} ---")
+    print(f"Auto-selected {m} qubits per register.")
+    print(f"Total Grid Qubits: {total_q} (Grid Size: {2**m} x {2**m})")
+
+    # Initialize Circuit
+    qc = QuantumCircuit(total_q + 1, total_q)
+
+    # Set oracle qubit to |-> for phase kickback
+    qc.x(total_q)
+    qc.h(total_q)
+
+    # Superposition
+    qc.h(range(total_q))
+    qc.barrier()
+
+    # Pre-calculate targets for the Oracle
+    targets = []
+    for x in range(2, 2**m):
+        if N_target % x == 0:
+            y = N_target // x
+            if y < 2**m:
+                targets.append((x, y))
+
+    # Calculate optimal Grover iterations based on dynamic grid size
+    grid_states = 2**total_q
+    if len(targets) > 0:
+        iterations = int((math.pi / 4.0) * math.sqrt(grid_states / len(targets)))
+        if iterations == 0: iterations = 1
+    else:
+        iterations = 1 # Run at least once to create flat noise if Prime
         
-        # We only need to check x up to sqrt(N) due to the symmetry of x * y = N
-        max_x = int(np.sqrt(N))
+    print(f"Optimal wave iterations (bounces): {iterations}")
+
+    # -------------------------------------------------------------------------
+    # 2. ORACLE & DIFFUSION LOOP
+    # -------------------------------------------------------------------------
+    for step in range(iterations):
+        # ORACLE
+        for x, y in targets:
+            # Flip zeros to ones
+            for i in range(m):
+                if (x & (1 << i)) == 0: qc.x(i)
+            for i in range(m):
+                if (y & (1 << i)) == 0: qc.x(i + m)
+                
+            qc.mcx(list(range(total_q)), total_q)
+            
+            # Uncompute flips
+            for i in range(m):
+                if (x & (1 << i)) == 0: qc.x(i)
+            for i in range(m):
+                if (y & (1 << i)) == 0: qc.x(i + m)
+        qc.barrier()
+
+        # DIFFUSION (Grover)
+        qc.h(range(total_q))
+        qc.x(range(total_q))
+
+        qc.h(total_q - 1)
+        qc.mcx(list(range(total_q - 1)), total_q - 1)
+        qc.h(total_q - 1)
+
+        qc.x(range(total_q))
+        qc.h(range(total_q))
+        qc.barrier()
+
+    # -------------------------------------------------------------------------
+    # 3. MEASUREMENT & DYNAMIC PARSING
+    # -------------------------------------------------------------------------
+    qc.measure(range(total_q), range(total_q))
+
+    sim = AerSimulator()
+    compiled_qc = transpile(qc, sim)
+    result = sim.run(compiled_qc, shots=shots).result()
+    raw_counts = result.get_counts()
+
+    # Dynamic noise threshold
+    noise_floor = shots / grid_states
+    threshold = noise_floor * 2
+
+    formatted_counts = {}
+    for bitstring, count in raw_counts.items():
+        # DYNAMIC SLICING: Qiskit is little-endian (q_N ... q_0)
+        # Top m bits are Y, Bottom m bits are X
+        y_val = int(bitstring[0 : m], 2)
+        x_val = int(bitstring[m : 2*m], 2)
         
-        for x in range(2, max_x + 1):
-            # The curve equation: y = N / x
-            y = N / x
-            
-            # If y is a perfect integer, the curve intersects a metamaterial well
-            if y.is_integer():
-                is_prime = False
-                curve_points.append((x, int(y)))
-                # Add the symmetric point as well
-                if x != int(y):
-                    curve_points.append((int(y), x))
-                    
-        if is_prime:
-            primes.append(N)
-        else:
-            intersections[N] = curve_points
-            
-    return primes, intersections
+        if count > threshold:
+            label = f"X={x_val},Y={y_val}"
+            formatted_counts[label] = count
 
-# Let's calculate primes up to 1000 using this curve method
-max_N = 1000
-computed_primes, composite_intersections = calculate_primes_via_curve(max_N)
+    # Safety Check for Primes
+    if not formatted_counts:
+        print(f"\n=> No factors found! The signal is flat noise. N={N_target} is likely PRIME.")
+        sorted_noise = sorted(raw_counts.items(), key=lambda x: x[1], reverse=True)[:3]
+        for bitstring, count in sorted_noise:
+            y_val = int(bitstring[0 : m], 2)
+            x_val = int(bitstring[m : 2*m], 2)
+            formatted_counts[f"Noise({x_val},{y_val})"] = count
+    else:
+        print(f"\n=> Significant intersections found: {formatted_counts}")
 
-# Save the primes to a CSV
-df_primes = pd.DataFrame({"Prime": computed_primes})
-df_primes.to_csv("output/curve_primes.csv", index=False)
+    # -------------------------------------------------------------------------
+    # 4. PLOTTING
+    # -------------------------------------------------------------------------
+    fig, ax = plt.subplots(figsize=(10, 6))
+    plot_histogram(formatted_counts, ax=ax, color='#00ffcc')
 
-# Let's visualize this concept using Matplotlib
-# We will plot the grid and the hyperbola for a composite (e.g., 24) and a prime (e.g., 23)
-fig, ax = plt.subplots(figsize=(8, 8))
+    ax.set_title(f"Auto-Scaled Qiskit Sieve (N={N_target}, {total_q} Qubits)", fontsize=14)
+    ax.set_xlabel("Grid Coordinates (X, Y)")
+    ax.set_ylabel("Measurement Amplitude (Shots)")
+    ax.set_facecolor('#111111')
+    fig.patch.set_facecolor('#111111')
+    ax.xaxis.label.set_color('lightgray')
+    ax.yaxis.label.set_color('lightgray')
+    ax.title.set_color('white')
+    ax.tick_params(colors='lightgray')
 
-# Define grid limits for visualization
-grid_max = 25
-x_grid = np.arange(1, grid_max + 1)
-y_grid = np.arange(1, grid_max + 1)
-X, Y = np.meshgrid(x_grid, y_grid)
+    plt.tight_layout()
+    file_path = f"output/qiskit_auto_{N_target}.png"
+    fig.savefig(file_path, dpi=150)
+    print(f"Saved quantum output to {file_path}")
 
-# Plot the internal integer grid (excluding x=1 and y=1 to represent non-trivial factors)
-ax.scatter(X[1:, 1:], Y[1:, 1:], color='lightgray', s=10, label='Internal Integer Grid (Wells)')
-
-# Plot continuous curves for x * y = N
-x_cont = np.linspace(1, grid_max, 500)
-
-# 1. Composite Number Curve (N=24)
-N_comp = 24
-y_comp = N_comp / x_cont
-# Filter points within grid
-valid_comp = y_comp <= grid_max
-ax.plot(x_cont[valid_comp], y_comp[valid_comp], color='#ffaa00', linewidth=2, label=f'Composite Curve ($x \\cdot y = {N_comp}$)')
-
-# Highlight intersections for the composite curve
-comp_x = [p[0] for p in composite_intersections[N_comp]]
-comp_y = [p[1] for p in composite_intersections[N_comp]]
-ax.scatter(comp_x, comp_y, color='red', s=80, zorder=5, label='Internal Intersections (Factors)')
-
-# 2. Prime Number Curve (N=23)
-N_prime = 23
-y_prime = N_prime / x_cont
-# Filter points within grid
-valid_prime = y_prime <= grid_max
-ax.plot(x_cont[valid_prime], y_prime[valid_prime], color='#00ffcc', linewidth=2, label=f'Prime Curve ($x \\cdot y = {N_prime}$)')
-
-ax.set_xlim(1, grid_max)
-ax.set_ylim(1, grid_max)
-ax.set_aspect('equal')
-ax.set_title("Hyperbolic Curve Sieve: Prime vs Composite", fontsize=14)
-ax.set_xlabel("Grid Factor X")
-ax.set_ylabel("Grid Factor Y")
-ax.grid(True, linestyle=':', alpha=0.6)
-ax.legend(loc='upper right')
-
-plt.tight_layout()
-fig.savefig("output/hyperbola_sieve.png", dpi=150)
-
-# Print first 50 primes found
-print(f"Calculated {len(computed_primes)} primes up to {max_N} using the curve method.")
-print(f"First 50 primes: {computed_primes[:50]}")
+# Run the simulation for a larger composite number
+run_auto_quantum_sieve(21)
