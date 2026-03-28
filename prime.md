@@ -65,5 +65,3 @@ The Measurement Setup: Place a standard 40 kHz ultrasonic transducer on one side
 
 For a proof-of-concept, researchers often skip the programmable part entirely and just 3D-print a static plastic board where the cavities are permanently hardcoded (via physical depth) to factor one specific number, purely to prove the wave-math works.
 
-Use a microphone array...
-
