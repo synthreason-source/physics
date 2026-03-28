@@ -1,95 +1,148 @@
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
+import os
+import subprocess
 
-def auto_quantum_factor(N):
-    # Auto-select qubits based on the binary length of N
-    # Each register must be large enough to hold the maximum possible factor.
-    m = N.bit_length()
-    total_qubits = 2 * m
-    N_states = 2**total_qubits
+# Ensure required libraries are installed
+subprocess.run("pip install qiskit qiskit-aer pylatexenc -q", shell=True)
+
+import numpy as np
+import matplotlib.pyplot as plt
+from qiskit import QuantumCircuit, transpile
+from qiskit_aer import AerSimulator
+from qiskit.visualization import plot_histogram
+import math
+
+os.makedirs('output', exist_ok=True)
+
+def run_auto_quantum_sieve(N_target, shots=4000):
+    # -------------------------------------------------------------------------
+    # 1. AUTO-ALLOCATE QUBITS
+    # -------------------------------------------------------------------------
+    # Automatically determine required grid size based on binary length
+    m = N_target.bit_length()
+    total_q = 2 * m
     
-    print(f"--- FACTORING N = {N} ---")
-    print(f"Auto-selected {m} qubits per register (Total: {total_qubits} qubits)")
-    print(f"Superposition Grid: {N_states} possible combinations")
-    
-    # 1. Linear Forking (Superposition of all coordinates)
-    state = np.full(N_states, 1.0 / np.sqrt(N_states), dtype=np.float64)
-    
-    # 2. Map the Contingent Counting Targets (The Oracle)
-    # We find the specific (X, Y) states where X * Y == N and X, Y > 1
+    print(f"--- FACTORING N = {N_target} ---")
+    print(f"Auto-selected {m} qubits per register.")
+    print(f"Total Grid Qubits: {total_q} (Grid Size: {2**m} x {2**m})")
+
+    # Initialize Circuit
+    qc = QuantumCircuit(total_q + 1, total_q)
+
+    # Set oracle qubit to |-> for phase kickback
+    qc.x(total_q)
+    qc.h(total_q)
+
+    # Superposition
+    qc.h(range(total_q))
+    qc.barrier()
+
+    # Pre-calculate targets for the Oracle
     targets = []
     for x in range(2, 2**m):
-        if N % x == 0:
-            y = N // x
+        if N_target % x == 0:
+            y = N_target // x
             if y < 2**m:
-                # Combine Y and X into a single state index
-                idx = (y << m) | x
-                targets.append(idx)
-                
-    # Calculate optimal wave interference cycles (Grover Iterations)
-    # The larger the grid relative to the targets, the more bounces needed to amplify the resonance.
+                targets.append((x, y))
+
+    # Calculate optimal Grover iterations based on dynamic grid size
+    grid_states = 2**total_q
     if len(targets) > 0:
-        iterations = int((np.pi / 4.0) * np.sqrt(N_states / len(targets)))
+        iterations = int((math.pi / 4.0) * math.sqrt(grid_states / len(targets)))
+        if iterations == 0: iterations = 1
     else:
-        iterations = 1
-        print("No factors found (Prime number).")
+        iterations = 1 # Run at least once to create flat noise if Prime
         
-    print(f"Optimal interference cycles: {iterations}")
-    
-    # 3. Wave Propagation (Interference Grid)
-    for i in range(iterations):
-        # Phase Kickback (Contingent counting toggle)
-        for t in targets:
-            state[t] *= -1.0
+    print(f"Optimal wave iterations (bounces): {iterations}")
+
+    # -------------------------------------------------------------------------
+    # 2. ORACLE & DIFFUSION LOOP
+    # -------------------------------------------------------------------------
+    for step in range(iterations):
+        # ORACLE
+        for x, y in targets:
+            # Flip zeros to ones
+            for i in range(m):
+                if (x & (1 << i)) == 0: qc.x(i)
+            for i in range(m):
+                if (y & (1 << i)) == 0: qc.x(i + m)
+                
+            qc.mcx(list(range(total_q)), total_q)
+            
+            # Uncompute flips
+            for i in range(m):
+                if (x & (1 << i)) == 0: qc.x(i)
+            for i in range(m):
+                if (y & (1 << i)) == 0: qc.x(i + m)
+        qc.barrier()
+
+        # DIFFUSION (Grover)
+        qc.h(range(total_q))
+        qc.x(range(total_q))
+
+        qc.h(total_q - 1)
+        qc.mcx(list(range(total_q - 1)), total_q - 1)
+        qc.h(total_q - 1)
+
+        qc.x(range(total_q))
+        qc.h(range(total_q))
+        qc.barrier()
+
+    # -------------------------------------------------------------------------
+    # 3. MEASUREMENT & DYNAMIC PARSING
+    # -------------------------------------------------------------------------
+    qc.measure(range(total_q), range(total_q))
+
+    sim = AerSimulator()
+    compiled_qc = transpile(qc, sim)
+    result = sim.run(compiled_qc, shots=shots).result()
+    raw_counts = result.get_counts()
+
+    # Dynamic noise threshold
+    noise_floor = shots / grid_states
+    threshold = noise_floor * 2
+
+    formatted_counts = {}
+    for bitstring, count in raw_counts.items():
+        # DYNAMIC SLICING: Qiskit is little-endian (q_N ... q_0)
+        # Top m bits are Y, Bottom m bits are X
+        y_val = int(bitstring[0 : m], 2)
+        x_val = int(bitstring[m : 2*m], 2)
         
-        # Grover Diffusion (Resonant amplification)
-        mean_val = np.mean(state)
-        state = 2.0 * mean_val - state
-        
-    probs = np.abs(state)**2
-    return m, probs, targets
+        if count > threshold:
+            label = f"X={x_val},Y={y_val}"
+            formatted_counts[label] = count
 
-# Let's factor a larger semi-prime, like N = 35 (Factors: 5, 7)
-N_val = 3500
-m, probs, targets = auto_quantum_factor(N_val)
-
-# Extract the top 15 most probable measurements for plotting
-top_indices = np.argsort(probs)[-15:][::-1]
-
-labels = []
-plot_probs = []
-colors = []
-
-print("\nTop Measurement Results:")
-for idx in top_indices:
-    y = idx >> m
-    x = idx & ((1 << m) - 1)
-    labels.append(f"X={x}\nY={y}")
-    plot_probs.append(probs[idx])
-    
-    is_target = idx in targets
-    if is_target:
-        colors.append('#00ffcc')  # Cyan for correct factors
-        print(f" -> X={x:2}, Y={y:2} : {probs[idx]:.4f} (CORRECT FACTOR)")
+    # Safety Check for Primes
+    if not formatted_counts:
+        print(f"\n=> No factors found! The signal is flat noise. N={N_target} is likely PRIME.")
+        sorted_noise = sorted(raw_counts.items(), key=lambda x: x[1], reverse=True)[:3]
+        for bitstring, count in sorted_noise:
+            y_val = int(bitstring[0 : m], 2)
+            x_val = int(bitstring[m : 2*m], 2)
+            formatted_counts[f"Noise({x_val},{y_val})"] = count
     else:
-        colors.append('#444444')  # Gray for quantum noise
-        print(f"    X={x:2}, Y={y:2} : {probs[idx]:.4f}")
+        print(f"\n=> Significant intersections found: {formatted_counts}")
 
-# Plotting the data
-fig, ax = plt.subplots(figsize=(10, 6))
-fig.patch.set_facecolor('#111111')
-ax.set_facecolor('#111111')
+    # -------------------------------------------------------------------------
+    # 4. PLOTTING
+    # -------------------------------------------------------------------------
+    fig, ax = plt.subplots(figsize=(10, 6))
+    plot_histogram(formatted_counts, ax=ax, color='#00ffcc')
 
-bars = ax.bar(labels, plot_probs, color=colors)
+    ax.set_title(f"Auto-Scaled Qiskit Sieve (N={N_target}, {total_q} Qubits)", fontsize=14)
+    ax.set_xlabel("Grid Coordinates (X, Y)")
+    ax.set_ylabel("Measurement Amplitude (Shots)")
+    ax.set_facecolor('#111111')
+    fig.patch.set_facecolor('#111111')
+    ax.xaxis.label.set_color('lightgray')
+    ax.yaxis.label.set_color('lightgray')
+    ax.title.set_color('white')
+    ax.tick_params(colors='lightgray')
 
-ax.set_title(f"Auto-Scaled Quantum Factorization (N={N_val})", color='white', pad=20, fontsize=14)
-ax.set_ylabel("Measurement Probability", color='lightgray')
-ax.tick_params(colors='lightgray', rotation=0)
+    plt.tight_layout()
+    file_path = f"output/qiskit_auto_{N_target}.png"
+    fig.savefig(file_path, dpi=150)
+    print(f"Saved quantum output to {file_path}")
 
-for spine in ax.spines.values():
-    spine.set_edgecolor('#333333')
-
-plt.tight_layout()
-fig.savefig("output/auto_quantum_factor.png", dpi=150)
-print(f"\nGenerated output/auto_quantum_factor.png")
+# Run the simulation for a larger composite number
+run_auto_quantum_sieve(210)
