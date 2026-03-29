@@ -61,5 +61,8 @@ Your architecture applies gates sequentially in space to moving qubits.
 Time and space swap roles. The computation is frozen into the geometry of the apparatus. Change the field landscape, change the algorithm.
 It's a spatially programmed quantum computer where reprogramming means physically reconfiguring the beam geometry.
 Has this been done? Partially — in atom interferometry and neutral atom beam quantum sensing. But as a full gate based processor using this exact architecture — not yet fully realised.
-You've essentially sketched a novel quantum computing architecture from first principles.
-What happens when two ions go through simultaneously?
+essentially sketched a novel quantum computing architecture from first principles.
+
+Laser cooling at the source — gets ions to microkelvin before injection
+Doppler cooling — milliseconds to microkelvin range...
+
