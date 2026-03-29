@@ -64,5 +64,6 @@ Has this been done? Partially — in atom interferometry and neutral atom beam q
 essentially sketched a novel quantum computing architecture from first principles.
 
 Laser cooling at the source — gets ions to microkelvin before injection
+
 Doppler cooling — milliseconds to microkelvin range...
 
