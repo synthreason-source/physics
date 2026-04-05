@@ -28,3 +28,11 @@ Aluminum (Al)	Metal	Very Low	N/A	Cheap plasmonic resonator and electrode materia
 Titanium Dioxide (TiO2)	Metal Oxide	Very Low	80 - 100	High-index dielectric for generating extreme Mie resonant voids
 Polystyrene (PS) Nanospheres	Nanomaterial Template	Moderate	2.5 - 2.6	Sacrificial templates for fabricating precise spherical microvoids
 Polyimide (Kapton)	High-Temp Polymer	Moderate	3.4 - 3.5	High-voltage dielectric testing for partial discharges
+
+To create these perfectly sized voids cheaply, researchers don't try to drill them. Instead, they use "sacrificial templates":
+
+Buy Polystyrene Nanospheres: You can purchase inexpensive bottles of polystyrene or silica nanospheres with incredibly tight tolerances (e.g., exactly 900 nm diameter).
+
+Cast the PMMA: You drop the nanospheres onto a substrate and pour liquid PMMA precursor over them.
+
+Dissolve the Spheres: Once the PMMA hardens, you wash the sample in a specific solvent (like toluene for polystyrene) that dissolves the core sphere but leaves the PMMA intact.
