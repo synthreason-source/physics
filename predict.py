@@ -51,16 +51,15 @@ def generate_expanded_framework():
     # 1. Core Framework Properties
     df['Barrier_Thickness'] = df['A'] * df['Barrier_Density']
     df['Lorentz_Potential'] = 1000 / df['Barrier_Thickness']
-    df['barrier_Stress'] = (df['Z']**2) / (df['A']**(1/3))
+    df['Barrier_Stress'] = (df['Z']**2) / (df['A']**(1/3))
 
-    # 2. Electrical Conductivity Prediction (Thick barrier shielding + low Ionization energy)
+    # 2. Electrical Conductivity Prediction
     df['Predicted_Conductivity'] = df['Barrier_Thickness'] / df['IE_eV']
 
-    # 3. Photoemission Threshold Prediction (Lorentz force generation scaled by barrier density)
+    # 3. Photoemission Threshold Prediction
     df['Predicted_Photoemission'] = df['Lorentz_Potential'] * df['Barrier_Density']
 
-    # 4. Magnetic Resonance Index (Peaks when Barrier Density is highest, i.e., Iron/Transition metals)
-    # Using an exponential function of density relative to the max density to highlight ferromagnetic peaks
+    # 4. Magnetic Resonance Index
     max_density = df['Barrier_Density'].max()
     df['Magnetic_Index'] = np.exp(df['Barrier_Density'] - max_density) * df['Barrier_Thickness'] / df['Rad_pm']
 
@@ -69,61 +68,65 @@ def generate_expanded_framework():
     df.to_csv(output_file, index=False)
     print(f"Success! Dataset saved to '{output_file}'\n")
 
-    # Display Top 5 Conductors and Magnetic Elements based on the model
-    print("Top 5 Predicted Electrical Conductors:")
-    print(df[['Element', 'Predicted_Conductivity', 'IE_eV']].sort_values(by='Predicted_Conductivity', ascending=False).head(5))
+    # --- NEW: PRINT ALL CALCULATED DETAILS ---
+    # Configure pandas to print the full table beautifully without truncation
+    pd.set_option('display.max_rows', None)
+    pd.set_option('display.max_columns', None)
+    pd.set_option('display.width', 1200)
+    pd.set_option('display.float_format', '{:.3f}'.format)
     
-    print("\nTop 5 Predicted Magnetic Elements:")
-    print(df[['Element', 'Magnetic_Index', 'Barrier_Density']].sort_values(by='Magnetic_Index', ascending=False).head(5))
+    # Select specific columns to print so it fits horizontally on a screen
+    print_cols = ['Z', 'Element', 'Barrier_Density', 'Barrier_Thickness', 
+                  'Lorentz_Potential', 'Barrier_Stress', 
+                  'Predicted_Conductivity', 'Predicted_Photoemission', 'Magnetic_Index']
+    
+    print("="*125)
+    print("COMPLETE THEORETICAL PREDICTIONS FOR ALL ELEMENTS")
+    print("="*125)
+    print(df[print_cols].to_string(index=False))
+    print("="*125)
 
     # Plotting the 6-Panel Dashboard
     print("\nGenerating visual dashboard...")
     fig, axs = plt.subplots(2, 3, figsize=(18, 10))
-    fig.suptitle("barrier Nuclear Barrier Predictions vs Actual Properties", fontsize=18, fontweight='bold')
+    fig.suptitle("Barrier Nuclear Barrier Predictions vs Actual Properties", fontsize=18, fontweight='bold')
 
-    # Helper to add standard annotations for a few key elements
     key_elements = ['He', 'C', 'O', 'Fe', 'Ag', 'Au', 'U']
     def annotate_points(ax, x_col, y_col):
         for idx, row in df.iterrows():
             if row['Symbol'] in key_elements:
                 ax.annotate(row['Symbol'], (row[x_col], row[y_col]), fontsize=9, alpha=0.8)
 
-    # Plot 1: Radius
     axs[0, 0].scatter(df['Barrier_Thickness'], df['Rad_pm'], c='blue', alpha=0.6)
     annotate_points(axs[0, 0], 'Barrier_Thickness', 'Rad_pm')
     axs[0, 0].set_title("1. Atomic Radius vs Barrier Thickness")
     axs[0, 0].set_xlabel("Barrier Thickness")
     axs[0, 0].set_ylabel("Actual Radius (pm)")
 
-    # Plot 2: Ionization Energy
     axs[0, 1].scatter(df['Lorentz_Potential'], df['IE_eV'], c='red', alpha=0.6)
     annotate_points(axs[0, 1], 'Lorentz_Potential', 'IE_eV')
     axs[0, 1].set_title("2. Ionization Energy vs Lorentz Potential")
     axs[0, 1].set_xlabel("Lorentz Potential (1/Thickness)")
     axs[0, 1].set_ylabel("Actual IE (eV)")
 
-    # Plot 3: barrier Stress
-    axs[0, 2].plot(df['Z'], df['barrier_Stress'], marker='o', c='purple', linestyle='-', alpha=0.6)
-    annotate_points(axs[0, 2], 'Z', 'barrier_Stress')
-    axs[0, 2].set_title("3. barrier Stress vs Atomic Number")
+    axs[0, 2].plot(df['Z'], df['Barrier_Stress'], marker='o', c='purple', linestyle='-', alpha=0.6)
+    annotate_points(axs[0, 2], 'Z', 'Barrier_Stress')
+    axs[0, 2].set_title("3. Barrier Stress vs Atomic Number")
     axs[0, 2].set_xlabel("Atomic Number (Z)")
-    axs[0, 2].set_ylabel("barrier Stress (Instability)")
+    axs[0, 2].set_ylabel("Barrier Stress (Instability)")
 
-    # Plot 4: Electrical Conductivity Prediction
     axs[1, 0].scatter(df['Z'], df['Predicted_Conductivity'], c='green', alpha=0.6)
     annotate_points(axs[1, 0], 'Z', 'Predicted_Conductivity')
     axs[1, 0].set_title("4. Predicted Electrical Conductivity")
     axs[1, 0].set_xlabel("Atomic Number (Z)")
     axs[1, 0].set_ylabel("Conductivity Index (Thickness / IE)")
 
-    # Plot 5: Photoemission Threshold
     axs[1, 1].scatter(df['Lorentz_Potential'], df['Predicted_Photoemission'], c='orange', alpha=0.6)
     annotate_points(axs[1, 1], 'Lorentz_Potential', 'Predicted_Photoemission')
     axs[1, 1].set_title("5. Photoemission Threshold Prediction")
     axs[1, 1].set_xlabel("Lorentz Potential")
     axs[1, 1].set_ylabel("Photoemission Index")
 
-    # Plot 6: Magnetic Resonance Index
     axs[1, 2].scatter(df['Z'], df['Magnetic_Index'], c='darkcyan', alpha=0.6)
     annotate_points(axs[1, 2], 'Z', 'Magnetic_Index')
     axs[1, 2].set_title("6. Predicted Magnetic Index")
