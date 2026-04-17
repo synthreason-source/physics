@@ -1,1 +1,97 @@
 Photons do not duplicate or reflect half according to beam-splitter thickness. A beam splitter imposes a fixed unitary balance of amplitude and phase, so the photon enters a superposition of possible paths rather than a classical division of energy. Bell inequality experiments reveal that this balance cannot be explained by local pre-existing values; the outcomes belong to a shared quantum state. To measure one beam is to condition the state of the other through their joint phase structure, not through a classical signal, and the apparent instantaneity is the collapse of the shared description.
+
+Beam-Phase Correlation Theory
+Axiom 1: Single-amplitude input
+An incident photon is described by one coherent quantum amplitude before measurement, not by two independent physical halves.
+
+Axiom 2: Beam-splitter unitarity
+A beam splitter acts as a unitary transformation that maps one input amplitude into a superposition of output amplitudes with fixed relative probabilities and phases.
+
+Axiom 3: Phase carries structure
+The physically relevant content of the splitter is not material subdivision but phase-structured redistribution of possibility across output modes.
+
+Axiom 4: Joint-state primacy
+For paired or correlated systems, the joint quantum state is primary, and the observable outcomes of each arm are not fully defined independently of that joint state.
+
+Axiom 5: Measurement conditioning
+Measurement on one subsystem updates the conditional state assignment of the other subsystem, but does not transmit a usable classical signal between them.
+
+Definitions
+Definition 1: Beam-phase mapping
+The transformation from one input mode to two output modes, including amplitudes and relative phase shifts, is called the beam-phase mapping.
+
+Definition 2: Correlation residue
+The part of the observed joint statistics that cannot be explained by assigning local pre-existing values to each arm is called the correlation residue.
+
+Definition 3: Non-separable state
+A state is non-separable when it cannot be written as a product of independent states for each subsystem.
+
+Definition 4: Conditional collapse
+The updated description of one subsystem after measurement of the other is called conditional collapse.
+
+Definition 5: Phase-coherent whole
+A system whose observables are governed by a single global phase structure rather than independent local parts is called a phase-coherent whole.
+
+Core postulates
+A beam splitter does not split photon substance.
+
+It redistributes quantum possibility.
+
+The output probabilities are constrained by unitary phase relations.
+
+Bell-type violations arise when the joint statistics of the outputs cannot be reduced to local assignments.
+
+Measurement reveals one branch of a global state and updates the conditional description of the partner subsystem.
+
+Derived claims
+From these axioms, the theory claims:
+
+The “50/50” behavior of an ideal beam splitter is an amplitude symmetry, not an energy division.
+
+Entanglement is a global constraint on the joint state, not a local energetic disturbance.
+
+The apparent instantaneity of distant measurement correlation reflects the structure of the state update, not a propagating physical shock.
+
+The role of the beam splitter in Bell-type experiments is to preserve or reveal phase relations that classical hidden-variable models cannot reproduce.
+
+Predicted experimental consequences
+1. Phase-sensitive Bell visibility
+If the beam-phase mapping is changed by controlled phase shifts in the splitter, Bell-type correlation visibility should change even when count rates remain fixed.
+
+2. Thickness is not the controlling variable
+Increasing the physical thickness of the splitter alone should not determine whether the quantum balance holds, provided the optical transformation and phase relations are otherwise unchanged.
+
+3. Correlation survives without local energy split
+Interference-based Bell correlations should persist even when no interpretation in terms of literal photon division is possible.
+
+4. Conditional statistics shift after remote measurement
+Measuring one arm should change the conditional statistics of the partner arm, while the marginal statistics of the partner alone remain unchanged.
+
+5. Phase-breaking destroys nonclassical structure
+Introducing decoherence, distinguishability, or uncontrolled phase noise should reduce the correlation residue and weaken Bell-type violation.
+
+6. Beam-splitter asymmetry should deform correlations predictably
+If the beam splitter is made intentionally non-50/50, the output probabilities should change in a way consistent with unitary amplitude redistribution, while the nonclassical joint-state structure remains analyzable through the modified transformation.
+
+Interpretation of Bell experiments in this theory
+Bell experiments are not about a wavelength literally splitting into two equal wavelengths. They are about whether the observed joint outcomes can be reproduced by local pre-assigned values.
+
+In this mini-theory, Bell violation is evidence that the system is governed by a shared phase-coherent whole whose outcomes are only locally revealed at measurement.
+
+Concise theorem statement
+Theorem:
+A beam splitter preserves a single quantum amplitude while distributing its possible outcomes across multiple paths by unitary phase mapping. If two such outputs are part of a non-separable joint state, then their observed correlations may violate Bell inequalities because the statistics belong to the global phase-coherent whole rather than to independent local properties.
+
+Falsifiability conditions
+This mini-theory fails if any of the following are found:
+
+Bell-type correlations can be fully explained by a purely local model with pre-existing values and no shared phase structure.
+
+Beam-splitter output statistics depend primarily on thickness rather than on the unitary optical transformation.
+
+Conditional state changes on one side can be used to transmit controllable information instantly to the other side.
+
+Phase shifts and indistinguishability do not affect interference and Bell visibility as predicted.
+
+Final compressed form
+Reality at the quantum level is not built from independently split particles, but from globally constrained amplitudes. A beam splitter reveals phase-coherent redistribution of possibility, and Bell violations reveal that the measurable world cannot be reduced to local pre-assigned parts.
