@@ -34,7 +34,7 @@ WARN_BG  = "#FAEEDA"; WARN_TXT = "#854F0B"
 OK_BG    = "#E1F5EE"; OK_TXT   = "#0F6E56"
 
 MAX_CYCLES       = 32000
-TICK_MS          = 2          # GUI poll interval
+TICK_MS          = 1          # GUI poll interval
 SAMPLES_PER_TICK = 64         # MC samples per queue-drain cycle
 LATTICE_N        = 8          # spin lattice side (8×8 = 64 spins ≡ totem count)
 
@@ -430,7 +430,7 @@ def _rand_prime(lo, hi):
 
 
 def make_problems():
-    p1 = _rand_prime(7,  6000000); p2 = _rand_prime(30, 2000000); N = p1 * p2
+    p1 = _rand_prime(7,  600); p2 = _rand_prime(30, 200); N = 133333333333333333333333333333337 # p1 * p2
     qa = random.choice([-3,-2,-1,1,2,3])
     qr1 = round(random.uniform(-7, 7), 1)
     qr2 = round(random.uniform(-7, 7), 1)
