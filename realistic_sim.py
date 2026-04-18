@@ -19,8 +19,8 @@ INFO_BG  = "#E6F1FB"; INFO_TXT = "#185FA5"
 WARN_BG  = "#FAEEDA"; WARN_TXT = "#854F0B"
 OK_BG    = "#E1F5EE"; OK_TXT   = "#0F6E56"
 
-MAX_CYCLES = 140
-TICK_MS    = 50
+MAX_CYCLES = 44000
+TICK_MS    = 1
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -28,27 +28,71 @@ TICK_MS    = 50
 # ─────────────────────────────────────────────────────────────────────────────
 
 def engine_factor(n):
-    p = random.randint(2, max(2, int(n**0.5)))
+    """
+    Semiprime factorisation — p and q may differ greatly in size.
+    Phase 1: Fermat's method (a²-b² = N), fast when p ≈ q.
+    Phase 2: Trial division sweep from 2 upward (catches unbalanced pairs quickly).
+    Energy = gap of b² from nearest perfect square.
+    """
+    root  = int(math.isqrt(n))
+    a     = root + 1 + random.randint(0, 3)
     cycle = 0
-    while cycle < MAX_CYCLES:
+
+    # ── Phase 1: Fermat annealing ────────────────────────────────
+    fermat_limit = min(MAX_CYCLES // 2, 8000)
+    while cycle < fermat_limit:
         cycle += 1
-        T = max(0.01, 1.0 - cycle / MAX_CYCLES)
-        delta = random.choice([-2,-1,1,2])
-        p_new = max(2, min(int(n**0.5), p + delta))
-        if (n % p_new) <= (n % p) or random.random() < math.exp(-(n%p_new - n%p)/(T*n*0.01+1e-9)):
-            p = p_new
-        cur_e   = n % p
-        disp_e  = min(100, (cur_e / max(n,1)) * 200)
-        log     = f"[{cycle:3d}] T={T:.3f}  p_probe={p}  remainder={cur_e}" if cycle%15==0 else None
-        if cur_e == 0 and p > 1 and (n//p) > 1:
-            q = n // p
-            yield 0, log, True, f"{p} × {q} = {n}", f"Beam angle θ₁={p} locked at cycle {cycle}.\nProduct manifold collapsed to factor pair ({p},{q})."
-            return
+        T    = max(0.005, 1.0 - cycle / fermat_limit)
+        step = max(1, int(T * 8))
+        a_new  = max(root + 1, a + random.choice([-step, -1, 1, step]))
+        b2_new = a_new * a_new - n
+        b2_cur = a     * a     - n
+        e_new  = abs(b2_new - int(b2_new**0.5)**2) if b2_new >= 0 else -b2_new + n
+        e_cur  = abs(b2_cur - int(b2_cur**0.5)**2) if b2_cur >= 0 else -b2_cur + n
+        if e_new <= e_cur or random.random() < math.exp(-(e_new - e_cur) / (T * n * 0.005 + 1e-9)):
+            a = a_new
+        b2 = a * a - n
+        if b2 >= 0:
+            b = int(b2**0.5)
+            if b * b == b2 and (a - b) > 1:
+                p, q   = a - b, a + b
+                ratio  = max(p, q) / min(p, q)
+                bal    = "balanced" if ratio < 2.0 else "unbalanced"
+                yield 0, None, True, \
+                      f"{p} × {q} = {n}\n(ratio p/q = {ratio:.4f}  —  {bal} pair)", \
+                      (f"Fermat beam found a={a}, b={b} at cycle {cycle}.\n"
+                       f"p = a−b = {p},  q = a+b = {q}.\n"
+                       f"Size ratio {ratio:.4f}.")
+                return
+        b2_safe = max(0, b2)
+        b_est   = int(b2_safe**0.5)
+        gap     = abs(b2_safe - b_est * b_est)
+        disp_e  = min(100, (gap / max(a, 1)) * 10)
+        log     = (f"[{cycle:3d}] T={T:.3f}  a_probe={a}  b²={b2}  gap={gap}"
+                   ) if cycle % 15 == 0 else None
         yield disp_e, log, False, None, None
-    for pp in range(2, int(n**0.5)+1):
+
+    # ── Phase 2: trial-division sweep (handles unbalanced semiprimes) ──
+    yield min(100, 50), f"[{cycle}] Fermat stalled — switching to trial-division sweep.", False, None, None
+    for pp in range(2, root + 1):
+        cycle += 1
         if n % pp == 0:
-            yield 0, None, True, f"{pp} × {n//pp} = {n}", f"Manifold sweep located factor pair ({pp},{n//pp})."
+            q     = n // pp
+            ratio = max(pp, q) / min(pp, q)
+            bal   = "balanced" if ratio < 2.0 else "unbalanced"
+            disp_e = min(100, (pp / max(root, 1)) * 60)
+            yield 0, None, True, \
+                  f"{pp} × {q} = {n}\n(ratio p/q = {ratio:.4f}  —  {bal} pair)", \
+                  (f"Trial-division sweep found factor {pp} at cycle {cycle}.\n"
+                   f"q = N / p = {q}.\n"
+                   f"Size ratio {ratio:.4f} — {'near-balanced' if ratio < 2 else 'highly unbalanced'} pair.")
             return
+        if cycle % 200 == 0:
+            prog   = pp / root
+            disp_e = min(100, prog * 80)
+            log    = f"[{cycle:3d}] trial p={pp}  progress={prog*100:.1f}%"
+            yield disp_e, log, False, None, None
+
     yield 0, None, True, f"{n} is prime", "No factor pair found — N is prime."
 
 
@@ -176,10 +220,21 @@ def engine_integral(f_str, a, b):
 # Random problem generator
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _rand_prime(lo, hi):
+    """Return a random prime in [lo, hi]."""
+    candidates = [x for x in range(max(2, lo), hi + 1)
+                  if all(x % d for d in range(2, int(x**0.5) + 1))]
+    if not candidates:
+        candidates = [p for p in range(2, 200)
+                      if all(p % d for d in range(2, int(p**0.5) + 1))]
+    return random.choice(candidates)
+
+
 def make_problems():
-    primes = [p for p in range(11,130) if all(p%d for d in range(2,int(p**0.5)+1))]
-    p1,p2  = random.sample(primes,2)
-    N      = p1*p2
+    # Semiprime with NO balance constraint — p and q drawn from independent ranges
+    p1 = _rand_prime(7,  60)
+    p2 = _rand_prime(30, 200)
+    N  = p1 * p2
 
     qa  = random.choice([-3,-2,-1,1,2,3])
     qr1 = round(random.uniform(-7,7),1)
@@ -203,13 +258,18 @@ def make_problems():
     ]
     f_str,ia,ib = random.choice(integ_pool)
 
-    city_lbl = "ABCDE"
+    city_lbl  = "ABCDE"
     city_desc = "  ".join(f"{city_lbl[i]}{cities[i]}" for i in range(5))
+
+    ratio_hint = max(p1,p2) / min(p1,p2)
+    bal_hint   = "balanced" if ratio_hint < 2.0 else f"unbalanced (ratio ≈ {ratio_hint:.1f})"
 
     return {
         f"Factorise  N = {N}": {
             "totems":  32,
-            "display": f"Factorise  N = {N}\nFind p, q > 1  such that  p × q = {N}\n(answer unknown — computed by annealer)",
+            "display": (f"Factorise  N = {N}\n"
+                        f"Find p, q > 1  such that  p × q = {N}\n"
+                        f"(semiprime — {bal_hint}; answer computed by Fermat + trial sweep)"),
             "engine":  lambda n=N: engine_factor(n),
         },
         f"Quadratic  {qa}x² + ({qb})x + ({qc}) = 0": {
@@ -240,7 +300,7 @@ def make_problems():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# GUI
+# GUI  (unchanged from original except problem display text)
 # ─────────────────────────────────────────────────────────────────────────────
 
 class App(tk.Tk):
@@ -259,7 +319,6 @@ class App(tk.Tk):
         self._build_ui()
         self._refresh_problems()
 
-    # ── UI ───────────────────────────────────────────────────────
     def _build_ui(self):
         pad = dict(padx=12,pady=6)
         top = tk.Frame(self,bg=PANEL_BG,bd=0,highlightthickness=1,highlightbackground=BORDER)
@@ -347,7 +406,6 @@ class App(tk.Tk):
         frm.config(bg=bg); frm._lbl.config(text=val,fg=fg,bg=bg)
         for c in frm.winfo_children(): c.config(bg=bg)
 
-    # ── problems ──────────────────────────────────────────────────
     def _refresh_problems(self):
         keys=list(self._problems.keys())
         self._prob_menu.config(values=keys); self._prob_menu.current(0)
@@ -357,7 +415,6 @@ class App(tk.Tk):
         if self._running: return
         self._problems=make_problems(); self._refresh_problems()
 
-    # ── reset ─────────────────────────────────────────────────────
     def _reset(self):
         if self._sim_job: self.after_cancel(self._sim_job); self._sim_job=None
         self._running=False; self._cycles=0; self._energy_hist=[]; self._sim_gen=None
@@ -373,7 +430,6 @@ class App(tk.Tk):
         self._ans_outer.pack_forget()
         self._btn_solve.config(text="Solve",bg=INFO_BG,fg=INFO_TXT)
 
-    # ── totems ────────────────────────────────────────────────────
     def _build_totems(self,n):
         for w in self._totem_frame.winfo_children(): w.destroy()
         self._totem_cvs=[]
@@ -393,7 +449,6 @@ class App(tk.Tk):
                 col=f"#{int(29+t*196):02x}{int(158-t*60):02x}{int(117-t*80):02x}"
             cv.itemconfig(cv._rect,fill=col)
 
-    # ── chart ─────────────────────────────────────────────────────
     def _draw_chart(self):
         cv=self._chart_cv; cv.delete("all")
         w=cv.winfo_width() or 300; h=cv.winfo_height() or 180
@@ -410,7 +465,6 @@ class App(tk.Tk):
         for i in range(len(pts)-1):
             cv.create_line(pts[i][0],pts[i][1],pts[i+1][0],pts[i+1][1],fill=BLUE,width=2)
 
-    # ── log ───────────────────────────────────────────────────────
     def _log(self,msg):
         if not msg: return
         self._log_text.config(state="normal")
@@ -422,7 +476,6 @@ class App(tk.Tk):
         self._log_text.config(state="normal"); self._log_text.delete("1.0","end")
         self._log_text.config(state="disabled")
 
-    # ── simulation ────────────────────────────────────────────────
     def _start_solve(self):
         if self._running: return
         self._reset()
