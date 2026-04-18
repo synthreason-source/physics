@@ -321,8 +321,8 @@ def _rand_prime(lo, hi):
 
 
 def make_problems():
-    p1 = _rand_prime(7,   6000)
-    p2 = _rand_prime(30,  200)
+    p1 = _rand_prime(7,   600)
+    p2 = _rand_prime(30,  20)
     N  = p1 * p2
 
     qa  = random.choice([-3, -2, -1, 1, 2, 3])
