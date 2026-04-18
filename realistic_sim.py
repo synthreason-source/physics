@@ -234,7 +234,7 @@ def make_problems():
     # Semiprime with NO balance constraint — p and q drawn from independent ranges
     p1 = _rand_prime(7,  60)
     p2 = _rand_prime(30, 200)
-    N  = 66666666
+    N  = p1 * p2
 
     qa  = random.choice([-3,-2,-1,1,2,3])
     qr1 = round(random.uniform(-7,7),1)
