@@ -430,7 +430,7 @@ def _rand_prime(lo, hi):
 
 
 def make_problems():
-    p1 = _rand_prime(7,  600); p2 = _rand_prime(30, 200); N = p1 * p2
+    p1 = _rand_prime(7,  6000000); p2 = _rand_prime(30, 2000000); N = p1 * p2
     qa = random.choice([-3,-2,-1,1,2,3])
     qr1 = round(random.uniform(-7, 7), 1)
     qr2 = round(random.uniform(-7, 7), 1)
