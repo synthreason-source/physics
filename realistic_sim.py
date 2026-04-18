@@ -40,40 +40,7 @@ def engine_factor(n):
 
     # ── Phase 1: Fermat annealing ────────────────────────────────
     fermat_limit = min(MAX_CYCLES // 2, 8000)
-    while cycle < fermat_limit:
-        cycle += 1
-        T    = max(0.005, 1.0 - cycle / fermat_limit)
-        step = max(1, int(T * 8))
-        a_new  = max(root + 1, a + random.choice([-step, -1, 1, step]))
-        b2_new = a_new * a_new - n
-        b2_cur = a     * a     - n
-        e_new  = abs(b2_new - int(b2_new**0.5)**2) if b2_new >= 0 else -b2_new + n
-        e_cur  = abs(b2_cur - int(b2_cur**0.5)**2) if b2_cur >= 0 else -b2_cur + n
-        if e_new <= e_cur or random.random() < math.exp(-(e_new - e_cur) / (T * n * 0.005 + 1e-9)):
-            a = a_new
-        b2 = a * a - n
-        if b2 >= 0:
-            b = int(b2**0.5)
-            if b * b == b2 and (a - b) > 1:
-                p, q   = a - b, a + b
-                ratio  = max(p, q) / min(p, q)
-                bal    = "balanced" if ratio < 2.0 else "unbalanced"
-                yield 0, None, True, \
-                      f"{p} × {q} = {n}\n(ratio p/q = {ratio:.4f}  —  {bal} pair)", \
-                      (f"Fermat beam found a={a}, b={b} at cycle {cycle}.\n"
-                       f"p = a−b = {p},  q = a+b = {q}.\n"
-                       f"Size ratio {ratio:.4f}.")
-                return
-        b2_safe = max(0, b2)
-        b_est   = int(b2_safe**0.5)
-        gap     = abs(b2_safe - b_est * b_est)
-        disp_e  = min(100, (gap / max(a, 1)) * 10)
-        log     = (f"[{cycle:3d}] T={T:.3f}  a_probe={a}  b²={b2}  gap={gap}"
-                   ) if cycle % 15 == 0 else None
-        yield disp_e, log, False, None, None
 
-    # ── Phase 2: trial-division sweep (handles unbalanced semiprimes) ──
-    yield min(100, 50), f"[{cycle}] Fermat stalled — switching to trial-division sweep.", False, None, None
     for pp in range(2, root + 1):
         cycle += 1
         if n % pp == 0:
