@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Emotion Chromophores</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@300;400;500&display=swap');
+
+  :root {
+    --bg: #05040a;
+    --good: #f5c842;
+    --want: #e8663a;
+    --bad: #4a7adf;
+    --love: #d94f7a;
+    --text: #e8e4db;
+    --muted: #6b6560;
+    --dim: #1a1820;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* noise overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 100;
+    opacity: 0.4;
+  }
+
+  header {
+    padding: 3rem 4rem 1rem;
+    border-bottom: 1px solid #1e1c28;
+    display: flex;
+    align-items: baseline;
+    gap: 2rem;
+    flex-wrap: wrap;
+  }
+
+  h1 {
+    font-family: 'DM Serif Display', serif;
+    font-size: clamp(2rem, 5vw, 3.8rem);
+    font-weight: 400;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    background: linear-gradient(135deg, #f5c842 0%, #e8663a 40%, #d94f7a 70%, #4a7adf 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .subtitle {
+    font-size: 0.7rem;
+    color: var(--muted);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-left: auto;
+    align-self: flex-end;
+    padding-bottom: 0.2rem;
+  }
+
+  .diagram {
+    padding: 3rem 4rem;
+  }
+
+  /* SPECTRUM BAR */
+  .spectrum-bar {
+    height: 6px;
+    border-radius: 3px;
+    background: linear-gradient(90deg, var(--bad) 0%, var(--love) 33%, var(--want) 66%, var(--good) 100%);
+    margin-bottom: 4rem;
+    position: relative;
+    opacity: 0.6;
+  }
+
+  .spectrum-bar::before {
+    content: 'VALENCE ←';
+    position: absolute;
+    left: 0;
+    top: -1.4rem;
+    font-size: 0.6rem;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+  }
+  .spectrum-bar::after {
+    content: '→ VALENCE';
+    position: absolute;
+    right: 0;
+    top: -1.4rem;
+    font-size: 0.6rem;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+  }
+
+  /* DISTANCE ROWS */
+  .distance-row {
+    display: grid;
+    grid-template-columns: 80px 1fr;
+    gap: 0 2rem;
+    margin-bottom: 2.5rem;
+    align-items: start;
+  }
+
+  .dist-label {
+    font-size: 0.6rem;
+    color: var(--muted);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    line-height: 1.8;
+    padding-top: 0.8rem;
+    border-right: 1px solid #1e1c28;
+    padding-right: 1rem;
+    text-align: right;
+  }
+
+  .dist-label span {
+    display: block;
+    font-family: 'DM Serif Display', serif;
+    font-size: 1.6rem;
+    letter-spacing: 0;
+    color: #3a3850;
+    line-height: 1;
+    margin-bottom: 0.3rem;
+  }
+
+  .molecules {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.8rem;
+    padding-top: 0.5rem;
+  }
+
+  /* MOLECULE CARD */
+  .mol {
+    position: relative;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    padding: 0.7rem 1rem;
+    cursor: default;
+    transition: all 0.25s ease;
+    background: var(--dim);
+    min-width: 120px;
+    overflow: hidden;
+  }
+
+  .mol::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+
+  .mol:hover::before { opacity: 1; }
+  .mol:hover { transform: translateY(-2px); }
+
+  .mol.hub {
+    border-width: 1px;
+    padding: 1rem 1.4rem;
+    min-width: 150px;
+  }
+
+  .mol.hub .word {
+    font-family: 'DM Serif Display', serif;
+    font-size: 1.4rem;
+    font-style: italic;
+  }
+
+  /* Color themes per hub */
+  .mol.good-family { --c: var(--good); }
+  .mol.want-family { --c: var(--want); }
+  .mol.bad-family  { --c: var(--bad); }
+  .mol.love-family { --c: var(--love); }
+
+  .mol { border-color: color-mix(in srgb, var(--c, #4a4860) 30%, transparent); }
+  .mol::before { background: radial-gradient(ellipse at center, color-mix(in srgb, var(--c, #4a4860) 8%, transparent), transparent 70%); }
+
+  .mol.hub {
+    border-color: color-mix(in srgb, var(--c) 60%, transparent);
+    box-shadow: 0 0 20px color-mix(in srgb, var(--c) 10%, transparent),
+                inset 0 0 20px color-mix(in srgb, var(--c) 5%, transparent);
+  }
+
+  .mol.hub::after {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--c) 12%, transparent), transparent 60%);
+    animation: pulse 3s ease-in-out infinite;
+    pointer-events: none;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 0.4; transform: scale(0.95); }
+    50% { opacity: 1; transform: scale(1.05); }
+  }
+
+  .word {
+    font-size: 0.95rem;
+    color: color-mix(in srgb, var(--c, #e8e4db) 90%, white);
+    font-weight: 500;
+    display: block;
+    margin-bottom: 0.15rem;
+  }
+
+  .gloss {
+    font-size: 0.58rem;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+    display: block;
+    line-height: 1.4;
+  }
+
+  .wave-tag {
+    display: inline-block;
+    font-size: 0.52rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.1rem 0.3rem;
+    border-radius: 2px;
+    margin-top: 0.3rem;
+    background: color-mix(in srgb, var(--c, #4a4860) 15%, transparent);
+    color: color-mix(in srgb, var(--c, #8884a0) 80%, white);
+  }
+
+  /* isolate = glows differently */
+  .mol.isolate {
+    border-style: dashed;
+    border-color: color-mix(in srgb, var(--c, #4a4860) 40%, transparent);
+  }
+
+  .mol.isolate .word {
+    font-family: 'DM Serif Display', serif;
+    font-style: italic;
+    font-size: 1.05rem;
+  }
+
+  /* CONJUGATION NETWORK */
+  .network-section {
+    margin-top: 4rem;
+    padding-top: 2rem;
+    border-top: 1px solid #1e1c28;
+  }
+
+  .section-head {
+    font-size: 0.6rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 2rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+  .section-head::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: #1e1c28;
+  }
+
+  .network-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.5rem;
+  }
+
+  @media (max-width: 700px) {
+    .network-grid { grid-template-columns: 1fr; }
+    header, .diagram { padding: 2rem 1.5rem; }
+    .distance-row { grid-template-columns: 60px 1fr; gap: 0 1rem; }
+  }
+
+  .superset-card {
+    background: var(--dim);
+    border: 1px solid #1e1c28;
+    border-radius: 6px;
+    padding: 1.2rem 1.4rem;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .superset-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--c1), var(--c2));
+  }
+
+  .superset-title {
+    font-family: 'DM Serif Display', serif;
+    font-size: 1rem;
+    margin-bottom: 0.8rem;
+    color: var(--text);
+    opacity: 0.9;
+  }
+
+  .superset-title small {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.58rem;
+    color: var(--muted);
+    display: block;
+    margin-top: 0.1rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    font-style: normal;
+  }
+
+  .chain {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    align-items: center;
+  }
+
+  .chain-node {
+    font-size: 0.72rem;
+    padding: 0.2rem 0.5rem;
+    border-radius: 3px;
+    background: color-mix(in srgb, var(--nc, #4a4860) 12%, transparent);
+    color: color-mix(in srgb, var(--nc, #8884a0) 85%, white);
+    border: 1px solid color-mix(in srgb, var(--nc, #4a4860) 20%, transparent);
+  }
+
+  .chain-arrow {
+    font-size: 0.6rem;
+    color: #2e2c3e;
+  }
+
+  /* LEGEND */
+  .legend {
+    margin-top: 3rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid #1e1c28;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+    font-size: 0.6rem;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .legend-swatch {
+    width: 20px;
+    height: 6px;
+    border-radius: 2px;
+  }
+
+  .legend-swatch.solid { background: #4a4860; }
+  .legend-swatch.dashed { background: repeating-linear-gradient(90deg, #4a4860 0 4px, transparent 4px 8px); }
+  .legend-swatch.bright { background: var(--love); box-shadow: 0 0 6px var(--love); }
+
+  /* Entrance animation */
+  .mol {
+    animation: fadeUp 0.4s ease both;
+  }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .distance-row:nth-child(1) .mol { animation-delay: calc(var(--i, 0) * 0.05s + 0.1s); }
+  .distance-row:nth-child(2) .mol { animation-delay: calc(var(--i, 0) * 0.05s + 0.3s); }
+  .distance-row:nth-child(3) .mol { animation-delay: calc(var(--i, 0) * 0.05s + 0.5s); }
+  .distance-row:nth-child(4) .mol { animation-delay: calc(var(--i, 0) * 0.05s + 0.7s); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Emotion Chromophores</h1>
+  <div class="subtitle">Morphological distance × semantic absorption</div>
+</header>
+
+<div class="diagram">
+  <div class="spectrum-bar"></div>
+
+  <!-- DISTANCE 0: Hub chromophores -->
+  <div class="distance-row">
+    <div class="dist-label"><span>0</span>Hub<br>Root</div>
+    <div class="molecules">
+      <div class="mol hub good-family" style="--i:0">
+        <span class="word">GOOD</span>
+        <span class="gloss">ground state — broadest absorption</span>
+        <span class="wave-tag">+valence / low arousal</span>
+      </div>
+      <div class="mol hub want-family" style="--i:1">
+        <span class="word">WANT</span>
+        <span class="gloss">directed energy, appetitive core</span>
+        <span class="wave-tag">+valence / high arousal</span>
+      </div>
+      <div class="mol hub bad-family" style="--i:2">
+        <span class="word">BAD</span>
+        <span class="gloss">aversive ground state</span>
+        <span class="wave-tag">−valence / low arousal</span>
+      </div>
+      <div class="mol hub love-family" style="--i:3">
+        <span class="word">LOVE</span>
+        <span class="gloss">bonding — highest colexification weight</span>
+        <span class="wave-tag">+valence / variable</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- DISTANCE 1: Derived / affixed -->
+  <div class="distance-row">
+    <div class="dist-label"><span>1</span>Affixed<br>Forms</div>
+    <div class="molecules">
+      <div class="mol good-family" style="--i:0">
+        <span class="word">goodness</span>
+        <span class="gloss">nominalized — static quality</span>
+        <span class="wave-tag">-ness suffix</span>
+      </div>
+      <div class="mol good-family" style="--i:1">
+        <span class="word">well-being</span>
+        <span class="gloss">compound — spatial wellness</span>
+        <span class="wave-tag">adverbial root</span>
+      </div>
+      <div class="mol want-family" style="--i:2">
+        <span class="word">desire</span>
+        <span class="gloss">Latinate register shift</span>
+        <span class="wave-tag">etymon: desiderare</span>
+      </div>
+      <div class="mol want-family" style="--i:3">
+        <span class="word">wanting</span>
+        <span class="gloss">progressive — active, lacks object</span>
+        <span class="wave-tag">-ing participle</span>
+      </div>
+      <div class="mol bad-family" style="--i:4">
+        <span class="word">fearful</span>
+        <span class="gloss">agent-bearing — embodied dread</span>
+        <span class="wave-tag">-ful auxochrome</span>
+      </div>
+      <div class="mol bad-family" style="--i:5">
+        <span class="word">fearsome</span>
+        <span class="gloss">object-projected — aesthetic terror</span>
+        <span class="wave-tag">-some auxochrome</span>
+      </div>
+      <div class="mol love-family" style="--i:6">
+        <span class="word">beloved</span>
+        <span class="gloss">passive/recipient — relational</span>
+        <span class="wave-tag">be- + past part.</span>
+      </div>
+      <div class="mol love-family" style="--i:7">
+        <span class="word">loveless</span>
+        <span class="gloss">defines by absence — negative space</span>
+        <span class="wave-tag">-less negation</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- DISTANCE 2: Compounds -->
+  <div class="distance-row">
+    <div class="dist-label"><span>2</span>Compound<br>Forms</div>
+    <div class="molecules">
+      <div class="mol good-family" style="--i:0">
+        <span class="word">bliss·ful</span>
+        <span class="gloss">peak valence + suffix — elevated register</span>
+        <span class="wave-tag">redshifted +</span>
+      </div>
+      <div class="mol want-family" style="--i:1">
+        <span class="word">love·sick</span>
+        <span class="gloss">want + pathology — emotion as illness</span>
+        <span class="wave-tag">compound</span>
+      </div>
+      <div class="mol want-family" style="--i:2">
+        <span class="word">bitter·sweet</span>
+        <span class="gloss">valence paradox — two roots in tension</span>
+        <span class="wave-tag">antonym compound</span>
+      </div>
+      <div class="mol bad-family" style="--i:3">
+        <span class="word">heart·break</span>
+        <span class="gloss">spatializes grief inside the body</span>
+        <span class="wave-tag">body metaphor</span>
+      </div>
+      <div class="mol bad-family" style="--i:4">
+        <span class="word">fear·mongering</span>
+        <span class="gloss">emotion weaponized — agentive</span>
+        <span class="wave-tag">compound + -ing</span>
+      </div>
+      <div class="mol love-family" style="--i:5">
+        <span class="word">tender·ness</span>
+        <span class="gloss">sensory → emotional transfer</span>
+        <span class="wave-tag">synaesthetic root</span>
+      </div>
+      <div class="mol bad-family" style="--i:6">
+        <span class="word">grief·stricken</span>
+        <span class="gloss">compound passive — grief as blow</span>
+        <span class="wave-tag">violence metaphor</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- DISTANCE 3: Isolates -->
+  <div class="distance-row">
+    <div class="dist-label"><span>3</span>Lexical<br>Isolates</div>
+    <div class="molecules">
+      <div class="mol isolate bad-family" style="--i:0">
+        <span class="word">Toska</span>
+        <span class="gloss">Russian — anguish without cause</span>
+        <span class="wave-tag">far IR — untranslatable</span>
+      </div>
+      <div class="mol isolate love-family" style="--i:1">
+        <span class="word">Saudade</span>
+        <span class="gloss">Portuguese — love for the absent</span>
+        <span class="wave-tag">far IR — untranslatable</span>
+      </div>
+      <div class="mol isolate bad-family" style="--i:2">
+        <span class="word">Sehnsucht</span>
+        <span class="gloss">German — longing for unlived life</span>
+        <span class="wave-tag">far IR — untranslatable</span>
+      </div>
+      <div class="mol isolate good-family" style="--i:3">
+        <span class="word">Mono no aware</span>
+        <span class="gloss">Japanese — bittersweet transience</span>
+        <span class="wave-tag">far IR — untranslatable</span>
+      </div>
+      <div class="mol isolate want-family" style="--i:4">
+        <span class="word">Mamihlapinatapai</span>
+        <span class="gloss">Fuegian — shared unspoken desire</span>
+        <span class="wave-tag">far IR — untranslatable</span>
+      </div>
+      <div class="mol isolate bad-family" style="--i:5">
+        <span class="word">Angst</span>
+        <span class="gloss">German — dread without object</span>
+        <span class="wave-tag">partially absorbed</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONJUGATED NETWORK -->
+  <div class="network-section">
+    <div class="section-head">Conjugated Superset Networks — colexification chains</div>
+    <div class="network-grid">
+
+      <div class="superset-card" style="--c1: var(--bad); --c2: #9b4dca;">
+        <div class="superset-title">Negative · High Arousal
+          <small>superset / conjugated pi-system</small>
+        </div>
+        <div class="chain">
+          <span class="chain-node" style="--nc: var(--bad)">fear</span>
+          <span class="chain-arrow">⟶</span>
+          <span class="chain-node" style="--nc: #9b4dca">terror</span>
+          <span class="chain-arrow">⟶</span>
+          <span class="chain-node" style="--nc: var(--bad)">dread</span>
+          <span class="chain-arrow">⟶</span>
+          <span class="chain-node" style="--nc: #c04444">rage</span>
+          <span class="chain-arrow">⟶</span>
+          <span class="chain-node" style="--nc: #8b4a9c">contempt</span>
+          <span class="chain-arrow">⟶</span>
+          <span class="chain-node" style="--nc: #555">Toska ✦</span>
+        </div>
+      </div>
+
+      <div class="superset-card" style="--c1: var(--love); --c2: var(--want);">
+        <div class="superset-title">Positive · High Arousal
+          <small>superset / conjugated pi-system</small>
+        </div>
+        <div class="chain">
+          <span class="chain-node" style="--nc: var(--love)">love</span>
+          <span class="chain-arrow">⟶</span>
+          <span class="chain-node" style="--nc: var(--want)">desire</span>
+          <span class="chain-arrow">⟶</span>
+          <span class="chain-node" style="--nc: #e05050">longing</span>
+          <span class="chain-arrow">⟶</span>
+          <span class="chain-node" style="--nc: var(--love)">joy</span>
+          <span class="chain-arrow">⟶</span>
+          <span class="chain-node" style="--nc: var(--good)">elation</span>
+          <span class="chain-arrow">⟶</span>
+          <span class="chain-node" style="--nc: #555">Saudade ✦</span>
+        </div>
+      </div>
+
+      <div class="superset-card" style="--c1: var(--good); --c2: #55aaaa;">
+        <div class="superset-title">Positive · Low Arousal
+          <small>superset / conjugated pi-system</small>
+        </div>
+        <div class="chain">
+          <span class="chain-node" style="--nc: var(--good)">good</span>
+          <span class="chain-arrow">⟶</span>
+          <span class="chain-node" style="--nc: #55aaaa">calm</span>
+          <span class="chain-arrow">⟶</span>
+          <span class="chain-node" style="--nc: var(--good)">content</span>
+          <span class="chain-arrow">⟶</span>
+          <span class="chain-node" style="--nc: #7ab87a">serenity</span>
+          <span class="chain-arrow">⟶</span>
+          <span class="chain-node" style="--nc: #55aaaa">peace</span>
+          <span class="chain-arrow">⟶</span>
+          <span class="chain-node" style="--nc: #555">Mono no aware ✦</span>
+        </div>
+      </div>
+
+      <div class="superset-card" style="--c1: #7060a0; --c2: var(--bad);">
+        <div class="superset-title">Negative · Low Arousal
+          <small>superset / conjugated pi-system</small>
+        </div>
+        <div class="chain">
+          <span class="chain-node" style="--nc: var(--bad)">sad</span>
+          <span class="chain-arrow">⟶</span>
+          <span class="chain-node" style="--nc: #7060a0">grief</span>
+          <span class="chain-arrow">⟶</span>
+          <span class="chain-node" style="--nc: #555088">despair</span>
+          <span class="chain-arrow">⟶</span>
+          <span class="chain-node" style="--nc: #7060a0">melancholy</span>
+          <span class="chain-arrow">⟶</span>
+          <span class="chain-node" style="--nc: var(--bad)">apathy</span>
+          <span class="chain-arrow">⟶</span>
+          <span class="chain-node" style="--nc: #555">Sehnsucht ✦</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- LEGEND -->
+  <div class="legend">
+    <div class="legend-item">
+      <div class="legend-swatch bright"></div>
+      Hub chromophore (ground state)
+    </div>
+    <div class="legend-item">
+      <div class="legend-swatch solid"></div>
+      Derived form (auxochrome)
+    </div>
+    <div class="legend-item">
+      <div class="legend-swatch dashed"></div>
+      Lexical isolate (far infrared)
+    </div>
+    <div style="margin-left: auto; color: #2e2c3e;">
+      ✦ terminal isolate — no adjacent translation
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
