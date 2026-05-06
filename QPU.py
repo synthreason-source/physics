@@ -18,7 +18,7 @@ import matplotlib.patheffects as pe
 from qiskit import QuantumCircuit, QuantumRegister, ClassicalRegister
 from qiskit.circuit.library import QFTGate
 from qiskit.quantum_info import Statevector
-from qiskit_aer.primitives import SamplerV2
+from qiskit import transpile
 import time, warnings
 warnings.filterwarnings('ignore')
 
@@ -167,18 +167,23 @@ peak_prob = max_amp_per_lap[peak_lap - 1]
 print(f"\nExtract at lap {peak_lap}  → peak P = {peak_prob:.4f}")
 
 # Rebuild and measure at peak lap
-qc_final = QuantumCircuit(sel_reg, anc_reg, cr)
-for q in sel_reg:
-    qc_final.h(q)
+# Sample directly from the statevector at peak_lap — no transpile, no bit-order scramble.
+# qc_grow already has exactly ITERS+1 laps; re-simulate to peak_lap cleanly.
+qc_peak = QuantumCircuit(sel_reg, anc_reg)
+for q in sel_reg: qc_peak.h(q)
 for _ in range(peak_lap):
-    arithmetic_oracle(qc_final, list(sel_reg), list(anc_reg), S, T, n, m)
-    diffuser(qc_final, list(sel_reg), n)
-qc_final.measure(sel_reg, cr)
+    arithmetic_oracle(qc_peak, list(sel_reg), list(anc_reg), S, T, n, m)
+    diffuser(qc_peak, list(sel_reg), n)
 
-sampler = SamplerV2()
-job = sampler.run([qc_final], shots=8192)
-counts_raw = job.result()[0].data.c.get_counts()
-counts = {int(k, 2): v / 8192 for k, v in counts_raw.items()}
+sv_peak  = Statevector(qc_peak)
+# Sample: statevector index bit i = sel[i] (LSB). Ancilla is |0⟩ via reset.
+raw_samples = sv_peak.sample_counts(shots=8192)
+# Statevector.sample_counts keys are bit strings: qubit n+m-1 ... qubit 0
+# We only care about sel bits (lower n bits of index)
+counts = {}
+for bitstr, freq in raw_samples.items():
+    sel_int = int(bitstr[-(n):], 2)  # rightmost n chars = sel qubits, LSB rightmost
+    counts[sel_int] = counts.get(sel_int, 0) + freq / 8192
 sim_time = time.time() - t0
 print(f"Simulation time: {sim_time:.1f}s")
 
@@ -301,7 +306,7 @@ ax_ring.annotate(f'EXTRACT\nafter {peak_lap} laps', xy=(R+Rb, -0.04), xytext=(1.
 
 ax_ring.set_title(
     f'Storage-Ring QPU  ─  {n} selection + {m} ancilla ions\n'
-    'Arithmetic oracle: Draper QFT adder computes sum in-flight',
+    'Arithmetic oracle: Draper QFT adder + explicit ancilla reset (qubit reuse)',
     color=WHITE, fontsize=8.5, pad=6)
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -486,6 +491,6 @@ fig.text(0.5, 0.008,
     'oracle: arithmetic QFT Draper adder — zero enumeration',
     ha='center', color=LGREY, fontsize=7)
 
-out = 'ring_qpu_arithmetic.png'
+out = '/mnt/user-data/outputs/ring_qpu_arithmetic.png'
 plt.savefig(out, dpi=155, bbox_inches='tight', facecolor=BG)
 print(f"\nSaved → {out}")
