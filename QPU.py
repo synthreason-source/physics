@@ -322,7 +322,7 @@ ax_laps.axvline(peak_lap, color=GREEN, ls='--', lw=1.5, label=f'Extract lap {pea
 
 # Theoretical sin² envelope (single solution assumption)
 th_x = np.linspace(0, len(max_amp_per_lap), 300)
-theta_g = np.arcsin(1 / np.sqrt(N))
+theta_g = np.arcsin(1.0 / np.sqrt(float(N)))
 sin2 = np.sin((2 * th_x + 1) * theta_g) ** 2
 ax_laps.plot(th_x, sin2, color=ACC, lw=1.2, ls='--', alpha=0.7,
              label='sin²((2k+1)θ) theory')
@@ -446,10 +446,10 @@ ax_proof.set_title('', pad=0)
 # ════════════════════════════════════════════════════════════════════════════
 # PANELS F+G — Scaling
 # ════════════════════════════════════════════════════════════════════════════
-ns_arr    = np.arange(4, 52, 2)
+ns_arr    = np.arange(4, 52, 2, dtype=float)
 classical = 2.0 ** ns_arr
 grover    = np.sqrt(2.0 ** ns_arr)
-ring_ions = ns_arr
+ring_ions = ns_arr  # already float
 
 ax_scale = fig.add_subplot(gs[3, :2])
 ax_scale.semilogy(ns_arr, classical,  color=RED,   lw=2.5, label='Classical search: O(2ⁿ)')
@@ -459,7 +459,7 @@ ax_scale.fill_between(ns_arr, 1, ring_ions, alpha=0.07, color=GREEN)
 ax_scale.fill_between(ns_arr, ring_ions, grover, alpha=0.05, color=GOLD)
 ax_scale.fill_between(ns_arr, grover, classical, alpha=0.05, color=RED)
 ax_scale.axvline(n, color=ACC, ls=':', lw=1.5, alpha=0.8)
-ax_scale.scatter([n], [ITERS], color=ACC, s=80, zorder=5)
+ax_scale.scatter([float(n)], [float(ITERS)], color=ACC, s=80, zorder=5)
 ax_scale.text(n+0.5, ITERS*2, f'n={n}\n{ITERS} laps', color=ACC, fontsize=7.5)
 ax_scale.set_xlabel('n (qubits)', fontsize=9)
 ax_scale.set_ylabel('Operations / ions (log)', fontsize=9)
