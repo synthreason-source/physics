@@ -53,9 +53,9 @@ plt.rcParams.update({
 # PROBLEM
 # ════════════════════════════════════════════════════════════════════════════
 rng = np.random.default_rng(7)
-n   = 18
-S   = sorted(rng.choice(np.arange(3, 600000), n, replace=False).tolist())
-_hidden = sorted(rng.choice(n, rng.integers(2, 5), replace=False).tolist())
+n   = 21
+S   = sorted(rng.choice(np.arange(43, 6000), n, replace=False).tolist())
+_hidden = sorted(rng.choice(n, rng.integers(17, 31), replace=False).tolist())
 T  = int(sum(S[i] for i in _hidden))
 del _hidden
 
