@@ -1,0 +1,1235 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ballistic Storage-Ring QPU — Subset Sum</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ── Design Tokens ──────────────────────────────── */
+:root {
+  --text-xs:   clamp(0.65rem, 0.6rem + 0.2vw, 0.75rem);
+  --text-sm:   clamp(0.75rem, 0.7rem + 0.25vw, 0.875rem);
+  --text-base: clamp(0.875rem, 0.8rem + 0.3vw, 1rem);
+  --text-lg:   clamp(1rem, 0.9rem + 0.5vw, 1.25rem);
+  --text-xl:   clamp(1.2rem, 1rem + 0.8vw, 1.6rem);
+  --space-1: 0.25rem; --space-2: 0.5rem; --space-3: 0.75rem;
+  --space-4: 1rem;    --space-5: 1.25rem; --space-6: 1.5rem;
+  --space-8: 2rem;    --space-10: 2.5rem; --space-12: 3rem;
+  --font-mono: 'JetBrains Mono', 'Courier New', monospace;
+  --font-body: 'Inter', system-ui, sans-serif;
+  --radius-sm: 0.25rem; --radius-md: 0.5rem; --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --transition: 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+[data-theme="dark"] {
+  --bg:             #050810;
+  --surface:        #0c1221;
+  --surface-2:      #111827;
+  --surface-3:      #162032;
+  --border:         rgba(56,189,248,0.12);
+  --border-strong:  rgba(56,189,248,0.25);
+  --text:           #f1f5f9;
+  --text-muted:     #94a3b8;
+  --text-faint:     #475569;
+  --acc:            #38bdf8;
+  --acc-hover:      #7dd3fc;
+  --gold:           #fbbf24;
+  --green:          #34d399;
+  --pink:           #f472b6;
+  --red:            #f87171;
+  --orange:         #fb923c;
+  --purple:         #a78bfa;
+  --shadow-sm: 0 1px 4px rgba(0,0,0,0.4);
+  --shadow-md: 0 4px 16px rgba(0,0,0,0.5);
+  --shadow-lg: 0 12px 40px rgba(0,0,0,0.6);
+}
+
+/* ── Base Reset ────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; -webkit-font-smoothing: antialiased; }
+body {
+  min-height: 100dvh;
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  color: var(--text);
+  background: var(--bg);
+  line-height: 1.6;
+  overflow-x: hidden;
+}
+button { cursor: pointer; background: none; border: none; font: inherit; color: inherit; }
+canvas { display: block; }
+
+/* ── Layout ────────────────────────────────────── */
+.layout {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  grid-template-rows: 52px 1fr;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+/* ── Top Bar ───────────────────────────────────── */
+.topbar {
+  grid-column: 1 / -1;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center;
+  padding: 0 var(--space-4);
+  gap: var(--space-4);
+  z-index: 10;
+}
+.topbar-logo {
+  display: flex; align-items: center; gap: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--acc);
+  letter-spacing: -0.02em;
+}
+.topbar-logo svg { flex-shrink: 0; }
+.topbar-divider { width: 1px; height: 20px; background: var(--border); }
+.topbar-title {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+.topbar-status {
+  margin-left: auto;
+  display: flex; align-items: center; gap: var(--space-3);
+}
+.status-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 6px var(--green);
+  animation: pulse 2s ease infinite;
+}
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+.status-label { font-size: var(--text-xs); color: var(--text-muted); font-family: var(--font-mono); }
+
+/* ── Sidebar ───────────────────────────────────── */
+.sidebar {
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+  padding: var(--space-4) 0;
+}
+.sidebar-section {
+  padding: 0 var(--space-4);
+  margin-bottom: var(--space-6);
+}
+.sidebar-label {
+  font-size: var(--text-xs);
+  font-family: var(--font-mono);
+  color: var(--text-faint);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: var(--space-2);
+}
+.sidebar-nav a {
+  display: flex; align-items: center; gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  text-decoration: none;
+  transition: background var(--transition), color var(--transition);
+  font-family: var(--font-mono);
+}
+.sidebar-nav a:hover { background: var(--surface-2); color: var(--text); }
+.sidebar-nav a.active { background: rgba(56,189,248,0.1); color: var(--acc); }
+.sidebar-nav a .icon { width: 14px; height: 14px; opacity: 0.7; flex-shrink: 0; }
+
+.kpi-group { display: flex; flex-direction: column; gap: var(--space-2); }
+.kpi-item {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+}
+.kpi-label { font-size: var(--text-xs); color: var(--text-faint); font-family: var(--font-mono); margin-bottom: var(--space-1); }
+.kpi-value {
+  font-size: var(--text-lg);
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: var(--acc);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.kpi-value.gold { color: var(--gold); }
+.kpi-value.green { color: var(--green); }
+.kpi-value.pink { color: var(--pink); }
+
+/* ── Main Content ──────────────────────────────── */
+.main {
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+/* ── Memory Banner ─────────────────────────────── */
+.mem-banner {
+  background: linear-gradient(135deg, rgba(56,189,248,0.08), rgba(167,139,250,0.06));
+  border: 1px solid rgba(56,189,248,0.2);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4) var(--space-6);
+  display: flex; align-items: center; gap: var(--space-6);
+  flex-wrap: wrap;
+}
+.mem-item { display: flex; flex-direction: column; gap: var(--space-1); }
+.mem-item-label { font-size: var(--text-xs); color: var(--text-faint); font-family: var(--font-mono); letter-spacing: 0.05em; }
+.mem-item-value { font-size: var(--text-lg); font-family: var(--font-mono); font-weight: 700; font-variant-numeric: tabular-nums; }
+.mem-divider { width: 1px; height: 36px; background: var(--border); flex-shrink: 0; }
+.reduction-badge {
+  margin-left: auto;
+  background: rgba(52,211,153,0.12);
+  border: 1px solid rgba(52,211,153,0.3);
+  border-radius: var(--radius-lg);
+  padding: var(--space-2) var(--space-4);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--green);
+  font-weight: 600;
+}
+
+/* ── Grid Layouts ──────────────────────────────── */
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
+.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: var(--space-4); }
+.grid-main { display: grid; grid-template-columns: 1fr 340px; gap: var(--space-4); }
+
+/* ── Panel ─────────────────────────────────────── */
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.panel-header {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: var(--space-3);
+}
+.panel-title { font-size: var(--text-sm); font-family: var(--font-mono); font-weight: 600; }
+.panel-badge {
+  font-size: var(--text-xs);
+  font-family: var(--font-mono);
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-sm);
+  background: rgba(56,189,248,0.12);
+  color: var(--acc);
+  border: 1px solid rgba(56,189,248,0.2);
+}
+.panel-badge.gold { background: rgba(251,191,36,0.1); color: var(--gold); border-color: rgba(251,191,36,0.2); }
+.panel-badge.green { background: rgba(52,211,153,0.1); color: var(--green); border-color: rgba(52,211,153,0.2); }
+.panel-badge.pink { background: rgba(244,114,182,0.1); color: var(--pink); border-color: rgba(244,114,182,0.2); }
+.panel-spacer { flex: 1; }
+.panel-body { padding: var(--space-4); }
+.panel-body-sm { padding: var(--space-3); }
+
+/* ── Canvas Panels ─────────────────────────────── */
+.canvas-wrap { position: relative; width: 100%; }
+.canvas-wrap canvas { width: 100% !important; height: auto !important; }
+
+/* ── Problem Display ───────────────────────────── */
+.problem-cfg {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));
+  gap: var(--space-1);
+}
+.qubit-chip {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-2);
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  transition: background var(--transition), border-color var(--transition), color var(--transition);
+  cursor: default;
+}
+.qubit-chip.selected {
+  background: rgba(56,189,248,0.15);
+  border-color: var(--acc);
+  color: var(--acc);
+  box-shadow: 0 0 8px rgba(56,189,248,0.2);
+}
+.qubit-chip.highlight {
+  background: rgba(52,211,153,0.12);
+  border-color: var(--green);
+  color: var(--green);
+}
+.qubit-header { font-size: var(--text-xs); font-family: var(--font-mono); color: var(--text-faint); margin-bottom: var(--space-1); }
+
+/* ── Progress Bar ──────────────────────────────── */
+.progress-bar-wrap {
+  display: flex; flex-direction: column; gap: var(--space-2);
+}
+.progress-label { display: flex; justify-content: space-between; font-size: var(--text-xs); font-family: var(--font-mono); color: var(--text-muted); }
+.progress-track {
+  height: 6px; background: var(--surface-2); border-radius: var(--radius-sm); overflow: hidden;
+}
+.progress-fill {
+  height: 100%; border-radius: var(--radius-sm);
+  background: linear-gradient(90deg, var(--acc), var(--purple));
+  transition: width 0.3s ease;
+}
+.progress-fill.green { background: linear-gradient(90deg, var(--green), var(--acc)); }
+
+/* ── Log Stream ────────────────────────────────── */
+.log-stream {
+  background: var(--bg);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  height: 220px;
+  overflow-y: auto;
+  display: flex; flex-direction: column; gap: 3px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.log-entry { display: flex; gap: var(--space-2); line-height: 1.4; }
+.log-time { color: var(--text-faint); flex-shrink: 0; }
+.log-ok  { color: var(--green); }
+.log-warn{ color: var(--gold); }
+.log-err { color: var(--red); }
+.log-info{ color: var(--acc); }
+.log-data{ color: var(--text-muted); }
+
+/* ── Verify Table ──────────────────────────────── */
+.verify-table { width: 100%; border-collapse: collapse; font-family: var(--font-mono); font-size: var(--text-xs); }
+.verify-table th {
+  padding: var(--space-2) var(--space-3);
+  text-align: left;
+  color: var(--text-faint);
+  font-weight: 500;
+  border-bottom: 1px solid var(--border);
+  letter-spacing: 0.05em;
+}
+.verify-table td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid rgba(56,189,248,0.05);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+.verify-table tr:hover td { background: var(--surface-2); }
+.verify-ok { color: var(--green); font-weight: 600; }
+.verify-fail { color: var(--red); }
+.prob-bar-cell { display: flex; align-items: center; gap: var(--space-2); }
+.prob-bar { height: 8px; border-radius: var(--radius-sm); background: var(--green); min-width: 2px; }
+
+/* ── Run Button ────────────────────────────────── */
+.run-btn {
+  display: inline-flex; align-items: center; gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  background: rgba(56,189,248,0.12);
+  border: 1px solid rgba(56,189,248,0.3);
+  border-radius: var(--radius-md);
+  color: var(--acc);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: background var(--transition), border-color var(--transition), box-shadow var(--transition);
+}
+.run-btn:hover { background: rgba(56,189,248,0.2); border-color: rgba(56,189,248,0.5); box-shadow: 0 0 12px rgba(56,189,248,0.2); }
+.run-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.run-btn.danger { color: var(--pink); background: rgba(244,114,182,0.08); border-color: rgba(244,114,182,0.2); }
+.run-btn.danger:hover { background: rgba(244,114,182,0.15); }
+
+/* ── Config Form ───────────────────────────────── */
+.cfg-form { display: flex; flex-direction: column; gap: var(--space-3); }
+.cfg-row { display: flex; flex-direction: column; gap: var(--space-1); }
+.cfg-label { font-size: var(--text-xs); font-family: var(--font-mono); color: var(--text-faint); letter-spacing: 0.05em; }
+.cfg-input {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--text);
+  width: 100%;
+  transition: border-color var(--transition);
+}
+.cfg-input:focus { outline: none; border-color: var(--acc); }
+.cfg-hint { font-size: var(--text-xs); color: var(--text-faint); }
+.cfg-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; margin-top: var(--space-2); }
+
+/* ── Ring Diagram ──────────────────────────────── */
+#ring-canvas { width: 100%; aspect-ratio: 1; max-width: 300px; margin: 0 auto; display: block; }
+
+/* ── Phase Histogram ─────────────────────────────── */
+#phase-canvas, #grover-canvas, #prob-canvas { width: 100%; display: block; }
+
+/* ── Scrollbars ────────────────────────────────── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+/* ── Section label ─────────────────────────────── */
+.section-title {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  font-family: var(--font-mono);
+  color: var(--text);
+  margin-bottom: var(--space-4);
+  display: flex; align-items: center; gap: var(--space-3);
+}
+.section-title::before {
+  content: '';
+  width: 3px; height: 1.2em;
+  background: var(--acc);
+  border-radius: 2px;
+}
+
+.empty-state {
+  text-align: center;
+  padding: var(--space-8);
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+@media (max-width: 900px) {
+  .layout { grid-template-columns: 1fr; }
+  .sidebar { display: none; }
+  .grid-2, .grid-3, .grid-main { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="layout">
+
+<!-- ── Top Bar ── -->
+<header class="topbar">
+  <div class="topbar-logo">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-label="QPU Logo">
+      <circle cx="12" cy="12" r="9" stroke="#38bdf8" stroke-width="1.5" stroke-dasharray="4 2"/>
+      <circle cx="12" cy="12" r="3" fill="#38bdf8" opacity="0.8"/>
+      <line x1="12" y1="3" x2="12" y2="7" stroke="#38bdf8" stroke-width="1.5"/>
+      <line x1="12" y1="17" x2="12" y2="21" stroke="#38bdf8" stroke-width="1.5"/>
+      <line x1="3" y1="12" x2="7" y2="12" stroke="#38bdf8" stroke-width="1.5"/>
+      <line x1="17" y1="12" x2="21" y2="12" stroke="#38bdf8" stroke-width="1.5"/>
+    </svg>
+    BSR-QPU
+  </div>
+  <div class="topbar-divider"></div>
+  <div class="topbar-title">Ballistic Storage-Ring · Subset Sum · Minimal Memory</div>
+  <div class="topbar-status">
+    <div class="status-dot" id="statusDot"></div>
+    <span class="status-label" id="statusLabel">IDLE</span>
+    <button class="run-btn" id="mainRunBtn" onclick="runGrover()">
+      <svg width="11" height="11" viewBox="0 0 12 12" fill="currentColor"><polygon points="2,1 11,6 2,11"/></svg>
+      RUN SIMULATION
+    </button>
+  </div>
+</header>
+
+<!-- ── Sidebar ── -->
+<nav class="sidebar">
+  <div class="sidebar-section">
+    <div class="sidebar-label">Navigate</div>
+    <div class="sidebar-nav">
+      <a href="#sec-config" class="active">
+        <svg class="icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>
+        Configuration
+      </a>
+      <a href="#sec-oracle">
+        <svg class="icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 2"/></svg>
+        Oracle Diagonal
+      </a>
+      <a href="#sec-grover">
+        <svg class="icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="1,12 5,6 9,9 13,3 15,5"/></svg>
+        Grover Laps
+      </a>
+      <a href="#sec-verify">
+        <svg class="icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="2,8 6,12 14,4"/></svg>
+        Verification
+      </a>
+    </div>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-label">System KPIs</div>
+    <div class="kpi-group">
+      <div class="kpi-item">
+        <div class="kpi-label">QUBITS (n)</div>
+        <div class="kpi-value" id="kpi-n">—</div>
+      </div>
+      <div class="kpi-item">
+        <div class="kpi-label">STATE SPACE (N)</div>
+        <div class="kpi-value gold" id="kpi-N">—</div>
+      </div>
+      <div class="kpi-item">
+        <div class="kpi-label">SOLUTIONS (M)</div>
+        <div class="kpi-value green" id="kpi-M">—</div>
+      </div>
+      <div class="kpi-item">
+        <div class="kpi-label">OPTIMAL LAPS</div>
+        <div class="kpi-value pink" id="kpi-laps">—</div>
+      </div>
+      <div class="kpi-item">
+        <div class="kpi-label">PEAK PROB</div>
+        <div class="kpi-value" id="kpi-prob">—</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-label">Memory</div>
+    <div class="kpi-group">
+      <div class="kpi-item">
+        <div class="kpi-label">SV ARRAY (complex128)</div>
+        <div class="kpi-value" id="kpi-sv-mem">—</div>
+      </div>
+      <div class="kpi-item">
+        <div class="kpi-label">PHASE ARRAY (float64)</div>
+        <div class="kpi-value gold" id="kpi-ph-mem">—</div>
+      </div>
+      <div class="kpi-item">
+        <div class="kpi-label">ANCILLA SAVED</div>
+        <div class="kpi-value green" id="kpi-saved">—</div>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<!-- ── Main ── -->
+<main class="main">
+
+  <!-- Memory Banner -->
+  <div class="mem-banner" id="memBanner">
+    <div class="mem-item">
+      <div class="mem-item-label">SV ARRAY</div>
+      <div class="mem-item-value" style="color:var(--acc)" id="b-sv">— B</div>
+    </div>
+    <div class="mem-divider"></div>
+    <div class="mem-item">
+      <div class="mem-item-label">PHASE ARRAY</div>
+      <div class="mem-item-value" style="color:var(--gold)" id="b-ph">— B</div>
+    </div>
+    <div class="mem-divider"></div>
+    <div class="mem-item">
+      <div class="mem-item-label">PREVIOUS (O(2^(n+m)))</div>
+      <div class="mem-item-value" style="color:var(--red)" id="b-prev">— B</div>
+    </div>
+    <div class="mem-divider"></div>
+    <div class="mem-item">
+      <div class="mem-item-label">ANCILLA QUBITS</div>
+      <div class="mem-item-value" style="color:var(--text-muted)" id="b-m">— bits</div>
+    </div>
+    <div class="reduction-badge" id="b-red">—× reduction</div>
+  </div>
+
+  <!-- Config + Ring -->
+  <div id="sec-config">
+    <div class="grid-main">
+      <!-- Config Panel -->
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">Problem Configuration</span>
+          <span class="panel-badge">QUBIT GENERATION</span>
+        </div>
+        <div class="panel-body">
+          <div class="cfg-form">
+            <div class="grid-2">
+              <div class="cfg-row">
+                <label class="cfg-label" for="inp-n">QUBITS (n)</label>
+                <input class="cfg-input" id="inp-n" type="number" min="4" max="24" value="21">
+                <span class="cfg-hint">Hilbert space: 2^n states</span>
+              </div>
+              <div class="cfg-row">
+                <label class="cfg-label" for="inp-seed">RNG SEED</label>
+                <input class="cfg-input" id="inp-seed" type="number" value="7">
+                <span class="cfg-hint">Deterministic generation</span>
+              </div>
+            </div>
+            <div class="cfg-row">
+              <label class="cfg-label" for="inp-target">TARGET SUM (T) — leave blank to auto-generate</label>
+              <input class="cfg-input" id="inp-target" type="number" placeholder="Auto-generate from random subset">
+              <span class="cfg-hint">Oracle marks |mask⟩ where Σ S[i]·bit[i] = T</span>
+            </div>
+            <div class="cfg-actions">
+              <button class="run-btn" onclick="generateProblem()">
+                <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 6a5 5 0 1 0 10 0 5 5 0 0 0-10 0"/><path d="M6 3v3l2 2"/></svg>
+                GENERATE PROBLEM
+              </button>
+              <button class="run-btn" onclick="runGrover()" id="runBtn2">
+                <svg width="11" height="11" viewBox="0 0 12 12" fill="currentColor"><polygon points="2,1 11,6 2,11"/></svg>
+                RUN GROVER
+              </button>
+            </div>
+          </div>
+
+          <!-- S array display -->
+          <div style="margin-top: var(--space-4);">
+            <div class="qubit-header">S ARRAY — <span id="s-n-label">n=21</span> elements · values 43–5999</div>
+            <div class="problem-cfg" id="s-display"></div>
+          </div>
+          <div style="margin-top: var(--space-3);">
+            <div class="qubit-header">TARGET T = <span id="t-label" style="color:var(--gold);font-weight:700">—</span> · Generated from <span id="subset-size-label" style="color:var(--acc)">—</span> hidden elements</div>
+          </div>
+
+          <!-- Progress -->
+          <div style="margin-top: var(--space-4);" id="prog-section">
+            <div class="progress-bar-wrap">
+              <div class="progress-label">
+                <span id="prog-label">Oracle Precompute</span>
+                <span id="prog-pct">0%</span>
+              </div>
+              <div class="progress-track"><div class="progress-fill" id="prog-fill" style="width:0%"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Ring Diagram -->
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">Storage Ring</span>
+          <span class="panel-badge">LIVE</span>
+          <span class="panel-spacer"></span>
+          <span id="ring-lap-label" style="font-size:var(--text-xs);font-family:var(--font-mono);color:var(--text-faint)">LAP 0</span>
+        </div>
+        <div class="panel-body" style="display:flex;flex-direction:column;align-items:center;gap:var(--space-3);">
+          <canvas id="ring-canvas" width="280" height="280" aria-label="Storage ring diagram"></canvas>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-2);width:100%">
+            <div class="kpi-item">
+              <div class="kpi-label">CURRENT LAP</div>
+              <div class="kpi-value" id="ring-lap">0</div>
+            </div>
+            <div class="kpi-item">
+              <div class="kpi-label">P(SOLUTION)</div>
+              <div class="kpi-value green" id="ring-prob">0.000</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Oracle Phase Histogram -->
+  <div id="sec-oracle">
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Oracle Phase Diagonal — Memory Layout</span>
+        <span class="panel-badge gold">O(2^n)</span>
+        <span class="panel-spacer"></span>
+        <span style="font-size:var(--text-xs);font-family:var(--font-mono);color:var(--text-faint)">phase[mask] = −1 if Σs=T else +1</span>
+      </div>
+      <div class="panel-body-sm">
+        <canvas id="phase-canvas" height="160" aria-label="Oracle phase diagonal histogram"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Grover Lap Chart + Log -->
+  <div id="sec-grover">
+    <div class="grid-main">
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">Grover Amplitude vs. Lap</span>
+          <span class="panel-badge pink">PEAK DETECTION</span>
+        </div>
+        <div class="panel-body-sm">
+          <canvas id="grover-canvas" height="200" aria-label="Grover peak probability per lap"></canvas>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">Simulation Log</span>
+          <span class="panel-badge">STREAM</span>
+        </div>
+        <div class="panel-body-sm">
+          <div class="log-stream" id="log-stream">
+            <div class="log-entry"><span class="log-time">00:00</span><span class="log-info">BSR-QPU simulator ready. Configure and press RUN.</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Probability Distribution + Verification -->
+  <div id="sec-verify">
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Peak-Lap Probability Distribution</span>
+        <span class="panel-badge green">SAMPLED</span>
+        <span class="panel-spacer"></span>
+        <span style="font-size:var(--text-xs);font-family:var(--font-mono);color:var(--text-faint)">8192 multinomial draws</span>
+      </div>
+      <div class="panel-body-sm">
+        <canvas id="prob-canvas" height="180" aria-label="Probability distribution at peak lap"></canvas>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-top:var(--space-4)">
+      <div class="panel-header">
+        <span class="panel-title">Classical Verification</span>
+        <span class="panel-badge green">O(n) per answer</span>
+        <span class="panel-spacer"></span>
+        <span id="verdict-badge" style="font-size:var(--text-xs);font-family:var(--font-mono);color:var(--text-faint)">AWAITING RUN</span>
+      </div>
+      <div class="panel-body-sm">
+        <div id="verify-area">
+          <div class="empty-state">Run simulation to see verified answers.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</main>
+</div>
+
+<script>
+// ── Seeded PRNG (mulberry32) ──────────────────────────────────────────────
+function mulberry32(seed) {
+  return function() {
+    let t = seed += 0x6D2B79F5;
+    t = Math.imul(t ^ t >>> 15, t | 1);
+    t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+// ── State ────────────────────────────────────────────────────────────────
+let STATE = {
+  n: 21, N: 1<<21, S: [], T: 0, m: 0,
+  phase: null, sv: null,
+  lapProbs: [], peakLap: 0, peakProb: 0,
+  M: 0, ITERS: 0, running: false,
+  simTime: 0
+};
+
+// ── Logging ──────────────────────────────────────────────────────────────
+function log(msg, cls='log-data') {
+  const stream = document.getElementById('log-stream');
+  const entry = document.createElement('div');
+  entry.className = 'log-entry';
+  const now = new Date();
+  const t = `${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+  entry.innerHTML = `<span class="log-time">${t}</span><span class="${cls}">${msg}</span>`;
+  stream.appendChild(entry);
+  stream.scrollTop = stream.scrollHeight;
+}
+
+// ── Formatting ───────────────────────────────────────────────────────────
+function fmtBytes(b) {
+  if (b < 1024) return `${b} B`;
+  if (b < 1024*1024) return `${(b/1024).toFixed(1)} KB`;
+  if (b < 1024*1024*1024) return `${(b/1024/1024).toFixed(1)} MB`;
+  return `${(b/1024/1024/1024).toFixed(2)} GB`;
+}
+function fmtNum(n) { return n.toLocaleString(); }
+
+// ── Problem Generation ───────────────────────────────────────────────────
+function generateProblem() {
+  const n = parseInt(document.getElementById('inp-n').value) || 21;
+  const seed = parseInt(document.getElementById('inp-seed').value) || 7;
+  const customT = document.getElementById('inp-target').value.trim();
+
+  const rng = mulberry32(seed * 2654435761 >>> 0);
+
+  // Generate S: n distinct values in [43, 6000)
+  const pool = [];
+  for (let i = 43; i < 6000; i++) pool.push(i);
+  // Fisher-Yates partial shuffle
+  const S = [];
+  for (let i = 0; i < n; i++) {
+    const j = i + Math.floor(rng() * (pool.length - i));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+    S.push(pool[i]);
+  }
+  S.sort((a, b) => a - b);
+
+  let T, subsetSize;
+  if (customT !== '') {
+    T = parseInt(customT);
+    subsetSize = '?';
+  } else {
+    // Random hidden subset
+    const minSz = Math.max(1, Math.floor(n * 0.4));
+    const maxSz = Math.min(n, Math.floor(n * 0.7));
+    const hSize = minSz + Math.floor(rng() * (maxSz - minSz + 1));
+    const hidden = [];
+    const idxPool = Array.from({length: n}, (_, i) => i);
+    for (let i = 0; i < hSize; i++) {
+      const j = i + Math.floor(rng() * (idxPool.length - i));
+      [idxPool[i], idxPool[j]] = [idxPool[j], idxPool[i]];
+      hidden.push(idxPool[i]);
+    }
+    T = hidden.reduce((s, i) => s + S[i], 0);
+    subsetSize = hSize;
+  }
+
+  const m = Math.ceil(Math.log2(S.reduce((a,b)=>a+b, 0) + 1));
+  const N = 1 << n;
+
+  STATE = { ...STATE, n, N, S, T, m, phase: null, sv: null, lapProbs: [], peakLap:0, peakProb:0, M:0, ITERS:0, running:false };
+
+  // Update memory banner
+  const bSv   = N * 16;
+  const bPh   = N * 8;
+  const bPrev = Math.pow(2, n + m) * 16;
+  const red   = Math.round(bPrev / bSv);
+
+  document.getElementById('b-sv').textContent   = fmtBytes(bSv);
+  document.getElementById('b-ph').textContent   = fmtBytes(bPh);
+  document.getElementById('b-prev').textContent = fmtBytes(bPrev);
+  document.getElementById('b-m').textContent    = `${m} bits`;
+  document.getElementById('b-red').textContent  = `${fmtNum(red)}× reduction`;
+
+  // KPIs
+  document.getElementById('kpi-n').textContent    = n;
+  document.getElementById('kpi-N').textContent    = fmtNum(N);
+  document.getElementById('kpi-sv-mem').textContent = fmtBytes(bSv);
+  document.getElementById('kpi-ph-mem').textContent = fmtBytes(bPh);
+  document.getElementById('kpi-saved').textContent  = fmtBytes(bPrev - bSv - bPh);
+  document.getElementById('kpi-laps').textContent   = '—';
+  document.getElementById('kpi-M').textContent      = '—';
+  document.getElementById('kpi-prob').textContent   = '—';
+
+  // Labels
+  document.getElementById('s-n-label').textContent  = `n=${n}`;
+  document.getElementById('t-label').textContent    = fmtNum(T);
+  document.getElementById('subset-size-label').textContent = subsetSize === '?' ? 'custom T' : `${subsetSize}`;
+
+  // S display chips
+  const sdiv = document.getElementById('s-display');
+  sdiv.innerHTML = '';
+  S.forEach((v, i) => {
+    const c = document.createElement('div');
+    c.className = 'qubit-chip';
+    c.id = `chip-${i}`;
+    c.title = `S[${i}] = ${v}`;
+    c.textContent = v;
+    sdiv.appendChild(c);
+  });
+
+  log(`Problem generated: n=${n}, T=${fmtNum(T)}, seed=${seed}`, 'log-info');
+  log(`S = [${S.slice(0,5).join(', ')}, ... ${S[n-1]}]  (${n} elements)`, 'log-data');
+  log(`Memory: sv=${fmtBytes(bSv)} + phase=${fmtBytes(bPh)} vs prev=${fmtBytes(bPrev)} (${fmtNum(red)}× reduction)`, 'log-ok');
+
+  drawRing(0, 0);
+  clearCharts();
+}
+
+// ── Main Grover Simulation ────────────────────────────────────────────────
+async function runGrover() {
+  if (STATE.running) return;
+  if (!STATE.S.length) { generateProblem(); await sleep(50); }
+
+  STATE.running = true;
+  setStatus('RUNNING', '#fbbf24');
+  document.getElementById('mainRunBtn').disabled = true;
+  document.getElementById('runBtn2').disabled = true;
+
+  const { n, N, S, T } = STATE;
+  const ITERS = Math.max(1, Math.round(Math.PI / 4 * Math.sqrt(N)));
+  STATE.ITERS = ITERS;
+
+  log(`──────────────────────────────`, 'log-data');
+  log(`Starting Grover: n=${n}, N=${fmtNum(N)}, ITERS=${ITERS}`, 'log-info');
+
+  // ── Phase precompute (chunked, non-blocking) ─────────────────────────
+  setProgress('Oracle Precompute', 0);
+  log(`Computing oracle diagonal (${fmtNum(N)} entries)…`, 'log-data');
+
+  const phase = new Float64Array(N);
+  let M = 0;
+  const CHUNK = 131072;
+  for (let start = 0; start < N; start += CHUNK) {
+    const end = Math.min(start + CHUNK, N);
+    for (let mask = start; mask < end; mask++) {
+      let s = 0;
+      for (let b = 0; b < n; b++) if ((mask >> b) & 1) s += S[b];
+      if (s === T) { phase[mask] = -1; M++; }
+      else phase[mask] = 1;
+    }
+    setProgress('Oracle Precompute', Math.round(start / N * 60));
+    await sleep(0);
+  }
+
+  STATE.phase = phase;
+  STATE.M = M;
+  log(`Oracle ready: M=${M} solution(s) found`, M > 0 ? 'log-ok' : 'log-warn');
+  document.getElementById('kpi-M').textContent = M;
+
+  drawPhaseCanvas(phase, N, M);
+
+  // ── Grover iterations ────────────────────────────────────────────────
+  const sv = new Float64Array(N).fill(1.0 / Math.sqrt(N));
+  STATE.sv = sv;
+  const lapProbs = [];
+  let peakLap = 0, peakProb = -1;
+  const t0 = performance.now();
+
+  for (let lap = 1; lap <= ITERS; lap++) {
+    // Oracle: sv *= phase (in-place)
+    for (let i = 0; i < N; i++) sv[i] *= phase[i];
+
+    // Diffuser: sv = 2*mean(sv) - sv
+    let sum = 0;
+    for (let i = 0; i < N; i++) sum += sv[i];
+    const mean2 = 2.0 * sum / N;
+    let best = 0;
+    for (let i = 0; i < N; i++) {
+      sv[i] = mean2 - sv[i];
+      const p = sv[i] * sv[i];
+      if (p > best) best = p;
+    }
+
+    lapProbs.push(best);
+    if (best > peakProb) { peakProb = best; peakLap = lap; }
+
+    // Update ring + KPIs every lap
+    drawRing(lap, best);
+    document.getElementById('ring-lap').textContent = lap;
+    document.getElementById('ring-prob').textContent = best.toFixed(4);
+    document.getElementById('ring-lap-label').textContent = `LAP ${lap}`;
+    document.getElementById('kpi-prob').textContent = peakProb.toFixed(4);
+    document.getElementById('kpi-laps').textContent = ITERS;
+
+    setProgress('Grover Lap', Math.round(60 + lap / ITERS * 35));
+    log(`  Lap ${String(lap).padStart(3)} │ P(peak)=${best.toFixed(5)}${best >= peakProb ? ' ★' : ''}`, best >= peakProb ? 'log-ok' : 'log-data');
+
+    await sleep(0);
+  }
+
+  STATE.simTime = performance.now() - t0;
+  STATE.lapProbs = lapProbs;
+  STATE.peakLap  = peakLap;
+  STATE.peakProb = peakProb;
+  STATE.sv = sv;
+
+  log(`Done in ${STATE.simTime.toFixed(1)} ms · peak lap ${peakLap}/${ITERS} · P=${peakProb.toFixed(5)}`, 'log-ok');
+  drawGroverChart(lapProbs, peakLap);
+  setProgress('Complete', 100);
+
+  // ── Sampling ─────────────────────────────────────────────────────────
+  log(`Sampling 8192 draws from peak-lap distribution…`, 'log-data');
+  const probs = new Float64Array(N);
+  let totalProb = 0;
+  for (let i = 0; i < N; i++) { probs[i] = sv[i]*sv[i]; totalProb += probs[i]; }
+
+  // Multinomial sample
+  const rng2 = mulberry32(42);
+  const counts = new Uint32Array(N);
+  for (let s = 0; s < 8192; s++) {
+    let r = rng2() * totalProb, cum = 0;
+    for (let i = 0; i < N; i++) { cum += probs[i]; if (r <= cum) { counts[i]++; break; } }
+  }
+
+  // Top candidates
+  const candidates = [];
+  for (let i = 0; i < N; i++) if (counts[i] > 0) candidates.push([i, counts[i]]);
+  candidates.sort((a,b)=>b[1]-a[1]);
+  const top = candidates.slice(0, 20);
+
+  drawProbCanvas(top, 8192, M);
+
+  // ── Classical Verification ────────────────────────────────────────────
+  log(`──────────────────────────────`, 'log-data');
+  log(`Classical verification (O(n)=${n} additions per answer)`, 'log-info');
+
+  const THRESH = 8192 * 0.005;
+  const rows = [];
+  let allOk = true;
+
+  for (const [state, cnt] of top) {
+    if (cnt < THRESH) break;
+    const t0v = performance.now();
+    let total = 0;
+    const bits = [];
+    for (let b = 0; b < n; b++) if ((state >> b) & 1) { total += S[b]; bits.push(b); }
+    const dt = (performance.now() - t0v) * 1000;
+    const ok = (total === T);
+    if (!ok) allOk = false;
+    const p = cnt / 8192;
+    const stateStr = state.toString(2).padStart(n,'0');
+    log(`  |${stateStr.slice(-8)}…⟩  P=${p.toFixed(3)}  sum=${fmtNum(total)}  ${ok?'✓ VERIFIED':'✗ FALSE POS'}  [${dt.toFixed(1)}µs]`, ok?'log-ok':'log-err');
+    rows.push({ state, stateStr, p, total, ok, bits, dt });
+
+    // Highlight chips
+    bits.forEach(b => {
+      const c = document.getElementById(`chip-${b}`);
+      if (c) c.classList.add('highlight');
+    });
+  }
+
+  renderVerifyTable(rows, allOk);
+  setStatus(allOk ? 'VERIFIED ✓' : 'FALSE POS', allOk ? '#34d399' : '#f87171');
+  STATE.running = false;
+  document.getElementById('mainRunBtn').disabled = false;
+  document.getElementById('runBtn2').disabled = false;
+}
+
+// ── Ring Canvas ──────────────────────────────────────────────────────────
+function drawRing(lap, prob) {
+  const cv = document.getElementById('ring-canvas');
+  const ctx = cv.getContext('2d');
+  const W = cv.width, H = cv.height, cx = W/2, cy = H/2;
+  ctx.clearRect(0,0,W,H);
+
+  const n = STATE.n || 21;
+  const ITERS = STATE.ITERS || Math.round(Math.PI/4*Math.sqrt(1<<n));
+
+  // Background glow
+  const grd = ctx.createRadialGradient(cx,cy,20,cx,cy,cx);
+  grd.addColorStop(0, 'rgba(56,189,248,0.04)');
+  grd.addColorStop(1, 'transparent');
+  ctx.fillStyle = grd; ctx.fillRect(0,0,W,H);
+
+  // Ring track
+  const R = cx - 24;
+  ctx.beginPath(); ctx.arc(cx,cy,R,0,Math.PI*2);
+  ctx.strokeStyle = 'rgba(56,189,248,0.12)'; ctx.lineWidth = 14; ctx.stroke();
+
+  // Progress arc
+  if (ITERS > 0 && lap > 0) {
+    const frac = lap / ITERS;
+    ctx.beginPath();
+    ctx.arc(cx,cy,R,-Math.PI/2,-Math.PI/2 + frac*Math.PI*2);
+    const col = prob > 0.5 ? '#34d399' : prob > 0.1 ? '#38bdf8' : '#a78bfa';
+    const g2 = ctx.createLinearGradient(cx-R,cy,cx+R,cy);
+    g2.addColorStop(0,'#a78bfa'); g2.addColorStop(1, col);
+    ctx.strokeStyle = g2; ctx.lineWidth = 14;
+    ctx.lineCap = 'round'; ctx.stroke();
+  }
+
+  // Packet dot — simulated position
+  const angle = ITERS > 0 ? (lap/ITERS)*Math.PI*2 - Math.PI/2 : -Math.PI/2;
+  const px = cx + R*Math.cos(angle), py = cy + R*Math.sin(angle);
+  ctx.beginPath(); ctx.arc(px,py,8,0,Math.PI*2);
+  ctx.fillStyle = '#38bdf8'; ctx.fill();
+  ctx.beginPath(); ctx.arc(px,py,8,0,Math.PI*2);
+  ctx.strokeStyle = 'rgba(56,189,248,0.4)'; ctx.lineWidth = 6; ctx.stroke();
+
+  // Center text
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const probColor = prob > 0.5 ? '#34d399' : '#38bdf8';
+  ctx.fillStyle = probColor;
+  ctx.font = `bold 22px 'JetBrains Mono', monospace`;
+  ctx.fillText(prob > 0 ? (prob*100).toFixed(1)+'%' : 'IDLE', cx, cy-8);
+  ctx.fillStyle = 'rgba(148,163,184,0.7)';
+  ctx.font = `11px 'JetBrains Mono', monospace`;
+  ctx.fillText(`P(sol) LAP ${lap}`, cx, cy+14);
+
+  // n-qubit labels around ring
+  ctx.fillStyle = 'rgba(56,189,248,0.35)';
+  ctx.font = `9px 'JetBrains Mono', monospace`;
+  for (let i = 0; i < Math.min(n,24); i++) {
+    const a = (i/Math.min(n,24))*Math.PI*2 - Math.PI/2;
+    const lx = cx + (R+22)*Math.cos(a), ly = cy + (R+22)*Math.sin(a);
+    ctx.fillText(`q${i}`, lx, ly);
+  }
+}
+
+// ── Phase Canvas ─────────────────────────────────────────────────────────
+function drawPhaseCanvas(phase, N, M) {
+  const cv = document.getElementById('phase-canvas');
+  const ctx = cv.getContext('2d');
+  const W = cv.clientWidth || 800;
+  cv.width = W; cv.height = 160;
+  ctx.clearRect(0,0,W,160);
+
+  // Bucket the N-element phase array into W buckets
+  const buckets = new Float32Array(W);
+  const bsize = N / W;
+  for (let i = 0; i < N; i++) {
+    const b = Math.min(W-1, Math.floor(i/bsize));
+    if (phase[i] < 0) buckets[b]++;
+  }
+  const maxB = Math.max(1, ...buckets);
+
+  // Draw bucketed histogram
+  ctx.fillStyle = 'rgba(56,189,248,0.06)';
+  for (let x = 0; x < W; x++) {
+    const h = (buckets[x]/maxB)*120;
+    if (h > 0) {
+      ctx.fillStyle = 'rgba(244,114,182,0.7)';
+      ctx.fillRect(x, 130-h, 1, h);
+    } else {
+      ctx.fillStyle = 'rgba(56,189,248,0.15)';
+      ctx.fillRect(x, 129, 1, 1);
+    }
+  }
+
+  // Axis
+  ctx.strokeStyle = 'rgba(148,163,184,0.2)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0,130); ctx.lineTo(W,130); ctx.stroke();
+
+  // Labels
+  ctx.fillStyle = '#94a3b8'; ctx.font = `10px 'JetBrains Mono',monospace`;
+  ctx.fillText(`|0⟩`, 4, 148);
+  ctx.fillText(`|2ⁿ-1⟩`, W-50, 148);
+  ctx.fillStyle = '#f472b6';
+  ctx.fillText(`+1 phase (non-solutions)`, 4, 20);
+  ctx.fillStyle = '#f472b6'; ctx.font = `bold 11px 'JetBrains Mono',monospace`;
+  ctx.fillText(`M=${M} solutions (−1 phase)`, 4, 35);
+  ctx.fillStyle = '#94a3b8'; ctx.font = `10px 'JetBrains Mono',monospace`;
+  ctx.fillText(`${fmtNum(N)} amplitudes in phase array`, W-200, 20);
+}
+
+// ── Grover Chart ─────────────────────────────────────────────────────────
+function drawGroverChart(lapProbs, peakLap) {
+  const cv = document.getElementById('grover-canvas');
+  const ctx = cv.getContext('2d');
+  const W = cv.clientWidth || 600;
+  cv.width = W; cv.height = 200;
+  ctx.clearRect(0,0,W,200);
+
+  if (!lapProbs.length) return;
+  const maxP = Math.max(...lapProbs, 0.001);
+  const L = lapProbs.length;
+  const pad = { l:40, r:10, t:10, b:30 };
+  const gW = W - pad.l - pad.r, gH = 200 - pad.t - pad.b;
+
+  // Grid
+  ctx.strokeStyle = 'rgba(148,163,184,0.08)'; ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const y = pad.t + gH - (i/4)*gH;
+    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(W-pad.r, y); ctx.stroke();
+    ctx.fillStyle='rgba(148,163,184,0.5)'; ctx.font=`9px 'JetBrains Mono',monospace`;
+    ctx.fillText((i/4*maxP).toFixed(2), 2, y+3);
+  }
+
+  // Gradient fill
+  const grad = ctx.createLinearGradient(0, pad.t, 0, pad.t+gH);
+  grad.addColorStop(0, 'rgba(56,189,248,0.3)');
+  grad.addColorStop(1, 'rgba(56,189,248,0.01)');
+
+  ctx.beginPath();
+  for (let i = 0; i < L; i++) {
+    const x = pad.l + (i/Math.max(1,L-1))*gW;
+    const y = pad.t + gH - (lapProbs[i]/maxP)*gH;
+    if (i===0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = 2; ctx.stroke();
+
+  // Fill
+  ctx.lineTo(pad.l + gW, pad.t + gH); ctx.lineTo(pad.l, pad.t + gH);
+  ctx.closePath(); ctx.fillStyle = grad; ctx.fill();
+
+  // Peak marker
+  if (peakLap > 0) {
+    const px = pad.l + ((peakLap-1)/Math.max(1,L-1))*gW;
+    const py = pad.t + gH - (lapProbs[peakLap-1]/maxP)*gH;
+    ctx.beginPath(); ctx.arc(px, py, 5, 0, Math.PI*2);
+    ctx.fillStyle = '#34d399'; ctx.fill();
+    ctx.strokeStyle = 'rgba(52,211,153,0.4)'; ctx.lineWidth = 4; ctx.stroke();
+    ctx.fillStyle = '#34d399'; ctx.font=`bold 10px 'JetBrains Mono',monospace`;
+    ctx.fillText(`PEAK L=${peakLap}`, px+8, py+4);
+  }
+
+  // X axis
+  ctx.strokeStyle='rgba(148,163,184,0.2)'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(pad.l, pad.t+gH); ctx.lineTo(W-pad.r,pad.t+gH); ctx.stroke();
+  ctx.fillStyle='rgba(148,163,184,0.5)'; ctx.font=`9px 'JetBrains Mono',monospace`;
+  ctx.fillText('0',pad.l,195); ctx.fillText(`${L}`,W-pad.r-10,195);
+  ctx.fillText('LAP →', W/2, 195);
+}
+
+// ── Prob Canvas ──────────────────────────────────────────────────────────
+function drawProbCanvas(top, total, M) {
+  const cv = document.getElementById('prob-canvas');
+  const ctx = cv.getContext('2d');
+  const W = cv.clientWidth || 600;
+  cv.width = W; cv.height = 180;
+  ctx.clearRect(0, 0, W, 180);
+  if (!top.length) return;
+
+  const show = top.slice(0, 32);
+  const maxP = show[0][1] / total;
+  const barH = Math.floor((180 - 30) / show.length) - 1;
+
+  show.forEach(([state, cnt], i) => {
+    const p = cnt / total;
+    const y = 5 + i * (barH + 1);
+    const bw = Math.max(1, (p/maxP) * (W - 120));
+
+    const isOracle = STATE.phase && STATE.phase[state] < 0;
+    ctx.fillStyle = isOracle ? 'rgba(52,211,153,0.6)' : 'rgba(56,189,248,0.25)';
+    ctx.fillRect(120, y, bw, barH);
+
+    ctx.fillStyle = isOracle ? '#34d399' : '#94a3b8';
+    ctx.font = `9px 'JetBrains Mono',monospace`;
+    ctx.fillText(`|${state.toString(2).padStart(Math.min(STATE.n,10),'0').slice(-10)}…⟩`, 2, y + barH/2 + 3);
+    ctx.fillText(p.toFixed(4), 120 + bw + 4, y + barH/2 + 3);
+  });
+}
+
+// ── Verify Table ─────────────────────────────────────────────────────────
+function renderVerifyTable(rows, allOk) {
+  if (!rows.length) return;
+  const area = document.getElementById('verify-area');
+  const badge = document.getElementById('verdict-badge');
+
+  badge.style.color = allOk ? 'var(--green)' : 'var(--red)';
+  badge.textContent  = allOk ? `ALL ${rows.filter(r=>r.ok).length} ANSWERS VERIFIED ✓` : '✗ FALSE POSITIVE DETECTED';
+
+  let html = `<table class="verify-table">
+    <thead><tr>
+      <th>STATE</th><th>PROB</th><th>SUM</th><th>TARGET</th><th>Δ</th><th>STATUS</th><th>VERIFY TIME</th>
+    </tr></thead><tbody>`;
+
+  for (const r of rows) {
+    const delta = r.total - STATE.T;
+    html += `<tr>
+      <td style="color:var(--acc)">|${r.stateStr.slice(-12)}…⟩</td>
+      <td><div class="prob-bar-cell"><div class="prob-bar" style="width:${Math.round(r.p*200)}px"></div>${r.p.toFixed(4)}</div></td>
+      <td>${fmtNum(r.total)}</td>
+      <td>${fmtNum(STATE.T)}</td>
+      <td style="color:${delta===0?'var(--green)':'var(--red)'}">${delta===0?'0':delta>0?'+'+delta:delta}</td>
+      <td class="${r.ok?'verify-ok':'verify-fail'}">${r.ok?'✓ VERIFIED':'✗ FALSE POS'}</td>
+      <td>${r.dt.toFixed(2)}µs</td>
+    </tr>`;
+  }
+  html += `</tbody></table>`;
+  area.innerHTML = html;
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function setStatus(label, color) {
+  document.getElementById('statusLabel').textContent = label;
+  document.getElementById('statusDot').style.background = color;
+  document.getElementById('statusDot').style.boxShadow = `0 0 6px ${color}`;
+}
+
+function setProgress(label, pct) {
+  document.getElementById('prog-label').textContent = label;
+  document.getElementById('prog-pct').textContent   = pct + '%';
+  document.getElementById('prog-fill').style.width  = pct + '%';
+  document.getElementById('prog-fill').className = pct >= 100 ? 'progress-fill green' : 'progress-fill';
+}
+
+function clearCharts() {
+  ['phase-canvas','grover-canvas','prob-canvas'].forEach(id => {
+    const cv = document.getElementById(id);
+    if (cv) cv.getContext('2d').clearRect(0,0,cv.width,cv.height);
+  });
+  document.getElementById('verify-area').innerHTML = '<div class="empty-state">Run simulation to see verified answers.</div>';
+  document.getElementById('verdict-badge').textContent = 'AWAITING RUN';
+  document.getElementById('verdict-badge').style.color = 'var(--text-faint)';
+  // clear chip highlights
+  document.querySelectorAll('.qubit-chip').forEach(c => c.classList.remove('highlight', 'selected'));
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────
+generateProblem();
+drawRing(0, 0);
+</script>
+</body>
+</html>
