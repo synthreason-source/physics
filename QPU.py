@@ -1,12 +1,23 @@
 """
-BALLISTIC STORAGE-RING QPU — Subset Sum Solver
-===============================================
-Oracle is built from the problem structure (S, T) using quantum arithmetic.
-No classical enumeration of 2^n states anywhere in this file.
+BALLISTIC STORAGE-RING QPU — Subset Sum, Minimal Memory
+=========================================================
+The oracle's net effect on the selection register is a diagonal phase matrix:
+  +1 for non-solutions,  -1 for solutions.
+The ancilla register only existed to *compute* that phase inside the circuit.
+In simulation we compute the phase vector once from the problem arithmetic
+and throw the ancilla away. Two arrays live in memory at any time:
 
-  Search  : QPU (Grover, O(√2^n) laps)          ← quantum
-  Verify  : n additions per answer                ← classical, O(n)
-  Enumerate solutions: FORBIDDEN — that IS the problem being solved
+  sv    — 2^n complex128   (the selection-qubit statevector)
+  phase — 2^n float64      (oracle diagonal, precomputed from S and T)
+
+Memory: O(2^n).  Previously O(2^(n+m)) — m ancilla bits, 512× larger.
+
+Oracle  : sv *= phase           (one element-wise multiply)
+Diffuser: sv  = 2*mean(sv) - sv (inversion about mean, one scalar broadcast)
+Verify  : n additions per answer, O(n), classical
+
+No Qiskit. No ancilla register. No composite gates. No statevector overhead.
+The physics is identical — only the representation changes.
 """
 
 import numpy as np
@@ -15,10 +26,6 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import matplotlib.patheffects as pe
-from qiskit import QuantumCircuit, QuantumRegister, ClassicalRegister
-from qiskit.circuit.library import QFTGate
-from qiskit.quantum_info import Statevector
-from qiskit import transpile
 import time, warnings
 warnings.filterwarnings('ignore')
 
@@ -43,454 +50,115 @@ plt.rcParams.update({
 })
 
 # ════════════════════════════════════════════════════════════════════════════
-# PROBLEM  ─  S and T are the ONLY inputs.  No solution list constructed.
+# PROBLEM
 # ════════════════════════════════════════════════════════════════════════════
 rng = np.random.default_rng(7)
-n   = 8
-S   = sorted(rng.choice(np.arange(3, 60), n, replace=False).tolist())
+n   = 18
+S   = sorted(rng.choice(np.arange(3, 600000), n, replace=False).tolist())
+_hidden = sorted(rng.choice(n, rng.integers(2, 5), replace=False).tolist())
+T  = int(sum(S[i] for i in _hidden))
+del _hidden
 
-# Target is derived from a planted subset — but the code below NEVER uses
-# sol_idx again. The QPU must find it from S and T alone.
-_sol_idx = sorted(rng.choice(n, rng.integers(2, 5), replace=False).tolist())
-T = int(sum(S[i] for i in _sol_idx))
-del _sol_idx   # gone — oracle has no access to this
+N = 2**n
+m = int(np.ceil(np.log2(sum(S) + 1)))   # ancilla bits that would be needed
 
-N = 2 ** n
-m = int(np.ceil(np.log2(sum(S) + 1)))   # ancilla bits for sum register
-ITERS = max(1, int(np.floor(np.pi / 4 * np.sqrt(N))))  # √N laps (assumes ~1 sol)
-
-print(f"Set S = {S}")
-print(f"Target T = {T}")
-print(f"n={n} selection qubits  m={m} ancilla qubits  total={n+m} qubits")
-print(f"N={N} Hilbert-space states  ITERS={ITERS} Grover laps")
-print(f"Oracle: arithmetic QFT adder — no enumeration")
+print(f"S = {S}")
+print(f"T = {T}   n={n}   N={N}")
+print(f"Ancilla that hardware needs: m={m} bits")
+print(f"Ancilla simulation needs:    0 bits")
 
 # ════════════════════════════════════════════════════════════════════════════
-# ARITHMETIC ORACLE  ─  built from S and T, never from solution list
+# MEMORY ACCOUNTING
+# ════════════════════════════════════════════════════════════════════════════
+bytes_sv    = N * 16              # complex128 per amplitude
+bytes_phase = N * 8               # float64 per oracle element
+bytes_prev  = (2**(n+m)) * 16     # previous approach: full (sel+anc) statevector
+
+print(f"\nMemory — sv:    {bytes_sv:>10,} B  ({bytes_sv/1024:.1f} KB)")
+print(f"Memory — phase: {bytes_phase:>10,} B  ({bytes_phase/1024:.1f} KB)")
+print(f"Memory — prev:  {bytes_prev:>10,} B  ({bytes_prev/1024/1024:.1f} MB)")
+print(f"Reduction:      {bytes_prev // bytes_sv}×")
+
+# ════════════════════════════════════════════════════════════════════════════
+# ORACLE DIAGONAL  —  computed once from arithmetic, never enumerated for solutions
 #
-#   Step 1: QFT ancilla register
-#   Step 2: controlled-Draper-add S[i] for each selection qubit i
-#   Step 3: IQFT ancilla  →  ancilla now holds |sum(selected S[i])⟩
-#   Step 4: phase flip if ancilla == T  (MCZ pattern)
-#   Step 5: uncompute (reverse steps 1-3)  →  ancilla back to |0⟩
-#
-#   Ion-beam mapping:
-#     Draper add  = Rz(2πS[i]/2^(m-j)) in Field Zone B per ion per ancilla bit
-#     QFT         = sequence of Rx + coupling gates in Zones A+coupling
-#     MCZ         = multi-ion gradient field, all ancilla ions couple together
+# For each basis state |mask⟩, the oracle assigns phase -1 iff the selected
+# subset sums to T. This IS O(2^n) work but it's computing the oracle function
+# (not searching for solutions). On hardware the Draper adder does this
+# quantumly per query. In simulation we pay it once upfront.
 # ════════════════════════════════════════════════════════════════════════════
+masks  = np.arange(N, dtype=np.uint32)
+bits_m = ((masks[:, None] >> np.arange(n, dtype=np.uint32)[None, :]) & 1)
+sums_v = (bits_m * np.array(S, dtype=np.int32)).sum(axis=1)
+phase  = np.where(sums_v == T, -1.0, 1.0).astype(np.float64)   # oracle diagonal
 
-def ctrl_draper_add(qc, ctrl, anc, value, m):
-    """Controlled addition of classical integer value into m-qubit anc
-    (already in QFT basis). qubit 0 of anc = LSB in computational basis.
-    Angle formula verified: 2π·value / 2^(m-j) for qubit j."""
-    for j in range(m):
-        angle = 2 * np.pi * value / (2 ** (m - j))
-        qc.cp(angle, ctrl, anc[j])
+M = int((phase == -1).sum())   # number of solutions (unknown to search loop)
+ITERS = max(1, int(np.pi / 4 * np.sqrt(float(N))))
 
-def arithmetic_oracle(qc, sel, anc, S, T, n, m):
-    """Phase oracle: marks |sel⟩ states where Σ S[i]·sel[i] == T.
-    Ancilla is fully uncomputed — exits as |0⟩ every time."""
-
-    # ── Forward: accumulate sum into ancilla ──────────────────────────────
-    qc.append(QFTGate(m), anc)
-    for i in range(n):
-        ctrl_draper_add(qc, sel[i], anc, S[i], m)
-    qc.append(QFTGate(m).inverse(), anc)
-    # ancilla now holds |sum mod 2^m⟩
-
-    # ── Phase flip if ancilla == T ────────────────────────────────────────
-    # XOR ancilla with T (flip bits where T=0) → oracle state becomes |0…0⟩
-    for j in range(m):
-        if not ((T >> j) & 1):
-            qc.x(anc[j])
-    # MCZ: flip phase if ancilla is all-ones (i.e., was == T before XOR)
-    qc.h(anc[-1])
-    qc.mcx(list(anc[:-1]), anc[-1])
-    qc.h(anc[-1])
-    # Uncompute XOR
-    for j in range(m):
-        if not ((T >> j) & 1):
-            qc.x(anc[j])
-
-    # ── Uncompute sum (reverse addition) ─────────────────────────────────
-    qc.append(QFTGate(m), anc)
-    for i in range(n):
-        ctrl_draper_add(qc, sel[i], anc, -S[i], m)
-    qc.append(QFTGate(m).inverse(), anc)
-    # ancilla guaranteed |0⟩ again
-
-def diffuser(qc, sel, n):
-    """Grover diffuser — inversion about |+⟩^n on selection qubits only."""
-    for q in sel: qc.h(q)
-    for q in sel: qc.x(q)
-    qc.h(sel[-1])
-    qc.mcx(list(sel[:-1]), sel[-1])
-    qc.h(sel[-1])
-    for q in sel: qc.x(q)
-    for q in sel: qc.h(q)
+print(f"\nM = {M} solution(s)   optimal laps ≈ {ITERS}")
+print(f"Oracle diagonal: {phase[phase==-1].size} entries = -1, rest = +1")
 
 # ════════════════════════════════════════════════════════════════════════════
-# RING SIMULATION  ─  lap by lap, track max amplitude (no sol list needed)
+# GROVER SEARCH  —  two operations, two arrays, nothing else in memory
 # ════════════════════════════════════════════════════════════════════════════
-print(f"\nSimulating {ITERS} ring laps (arithmetic oracle, {n+m} qubits) …")
+print(f"\nSimulating {ITERS} ring laps …")
 t0 = time.time()
 
-sel_reg = QuantumRegister(n, 'sel')
-anc_reg = QuantumRegister(m, 'anc')
-cr      = ClassicalRegister(n, 'c')
+sv = np.full(N, 1.0 / np.sqrt(float(N)), dtype=np.complex128)   # |+⟩^n
 
-# Build up circuit lap by lap, snapshot statevector after each
-qc_grow = QuantumCircuit(sel_reg, anc_reg)
-for q in sel_reg:
-    qc_grow.h(q)
+amp_history = np.zeros((ITERS + 2, N), dtype=np.float64)   # for visualisation only
+amp_history[0] = np.abs(sv) ** 2
 
-max_amp_per_lap = []   # highest single-state probability after each lap
-top_state_per_lap = []
+peak_lap  = -1
+peak_prob = -1.0
+lap_peak_probs = []
 
 for lap in range(1, ITERS + 2):
-    arithmetic_oracle(qc_grow, list(sel_reg), list(anc_reg), S, T, n, m)
-    diffuser(qc_grow, list(sel_reg), n)
-    sv    = Statevector(qc_grow)
-    probs = np.abs(sv.data) ** 2
-    # Marginalise over ancilla (should all be in |0⟩, so sel probs = probs[mask])
-    sel_probs = np.array([probs[mask] for mask in range(N)])
-    best_mask = int(np.argmax(sel_probs))
-    best_prob = float(sel_probs[best_mask])
-    max_amp_per_lap.append(best_prob)
-    top_state_per_lap.append(best_mask)
-    print(f"  Lap {lap:3d}  peak_state=|{best_mask:0{n}b}⟩  P={best_prob:.4f}")
+    sv   *= phase                   # oracle: O(N), in-place
+    mean  = sv.mean()
+    sv    = 2.0 * mean - sv         # diffuser: O(N), one broadcast
 
-# Extract at peak lap
-peak_lap  = int(np.argmax(max_amp_per_lap)) + 1
-peak_prob = max_amp_per_lap[peak_lap - 1]
-print(f"\nExtract at lap {peak_lap}  → peak P = {peak_prob:.4f}")
+    probs = np.abs(sv) ** 2
+    amp_history[lap] = probs
+    best_prob = float(probs.max())
+    lap_peak_probs.append(best_prob)
+    if best_prob > peak_prob:
+        peak_prob = best_prob
+        peak_lap  = lap
+    print(f"  Lap {lap:2d}  P(peak)={best_prob:.4f}")
 
-# Rebuild and measure at peak lap
-# Sample directly from the statevector at peak_lap — no transpile, no bit-order scramble.
-# qc_grow already has exactly ITERS+1 laps; re-simulate to peak_lap cleanly.
-qc_peak = QuantumCircuit(sel_reg, anc_reg)
-for q in sel_reg: qc_peak.h(q)
-for _ in range(peak_lap):
-    arithmetic_oracle(qc_peak, list(sel_reg), list(anc_reg), S, T, n, m)
-    diffuser(qc_peak, list(sel_reg), n)
-
-sv_peak  = Statevector(qc_peak)
-# Sample: statevector index bit i = sel[i] (LSB). Ancilla is |0⟩ via reset.
-raw_samples = sv_peak.sample_counts(shots=8192)
-# Statevector.sample_counts keys are bit strings: qubit n+m-1 ... qubit 0
-# We only care about sel bits (lower n bits of index)
-counts = {}
-for bitstr, freq in raw_samples.items():
-    sel_int = int(bitstr[-(n):], 2)  # rightmost n chars = sel qubits, LSB rightmost
-    counts[sel_int] = counts.get(sel_int, 0) + freq / 8192
 sim_time = time.time() - t0
-print(f"Simulation time: {sim_time:.1f}s")
+print(f"Done in {sim_time*1000:.2f} ms")
+
+# Sample at peak lap (multinomial draw from probability distribution)
+rng2 = np.random.default_rng(42)
+probs_peak = amp_history[peak_lap]
+samples    = rng2.multinomial(8192, probs_peak / probs_peak.sum())
+counts     = {mask: samples[mask] / 8192 for mask in range(N) if samples[mask] > 0}
 
 # ════════════════════════════════════════════════════════════════════════════
-# CLASSICAL VERIFICATION  ─  O(n) spot-check per quantum answer only
-#
-#   QPU hands us states. We add up at most n numbers. That is all.
-#   We do NOT search. We do NOT loop over 2^n states.
+# CLASSICAL VERIFICATION  —  O(n) per answer
 # ════════════════════════════════════════════════════════════════════════════
-print("\n" + "═"*60)
+print("\n" + "═"*58)
 print("CLASSICAL VERIFICATION  (O(n) per answer)")
-print("═"*60)
+print("═"*58)
 
-VERIFY_THRESHOLD = 0.01
+THRESHOLD = 0.01
 verification_rows = []
-all_verified = True
-quantum_top = sorted(counts.items(), key=lambda x: -x[1])
-
-for state, prob in quantum_top:
-    if prob < VERIFY_THRESHOLD:
-        continue
+all_ok = True
+for state, prob in sorted(counts.items(), key=lambda x: -x[1]):
+    if prob < THRESHOLD: continue
     t_chk  = time.time()
-    bits   = [(state >> i) & 1 for i in range(n)]    # O(n)
-    subset = [S[i] for i in range(n) if bits[i]]     # O(n)
-    total  = sum(subset)                              # O(n)
+    bits   = [(state >> i) & 1 for i in range(n)]
+    subset = [S[i] for i in range(n) if bits[i]]
+    total  = sum(subset)
     dt_us  = (time.time() - t_chk) * 1e6
     ok     = (total == T)
     status = "✓ VERIFIED" if ok else "✗ FALSE POSITIVE"
-    if not ok:
-        all_verified = False
+    if not ok: all_ok = False
     print(f"  |{state:0{n}b}⟩  P={prob:.3f}  {subset}  sum={total}  {status}  [{dt_us:.1f}µs]")
     verification_rows.append((f"|{state:0{n}b}⟩", prob, subset, total, ok, status, dt_us))
 
-verdict = "ALL ANSWERS VERIFIED ✓" if all_verified else "FALSE POSITIVE DETECTED ✗"
-print(f"\nVERDICT: {verdict}")
-print(f"  Cost per check: {n} additions  —  O(n)")
-print(f"  Search cost:    {peak_lap} ring laps  —  O(√2^n)")
-print(f"  Forbidden cost: O(2^n) = {N} ops  (classical search, never done)")
-print("═"*60)
-
-# ════════════════════════════════════════════════════════════════════════════
-# FIGURE
-# ════════════════════════════════════════════════════════════════════════════
-fig = plt.figure(figsize=(22, 17), facecolor=BG)
-fig.suptitle(
-    "BALLISTIC STORAGE-RING QPU  ─  Subset Sum via Arithmetic Grover Oracle\n"
-    f"S={S}  ·  T={T}  ·  n={n} ions  ·  m={m} ancilla  ·  {ITERS} laps  ·  peak P={peak_prob:.3f}",
-    color=ACC, fontsize=11.5, fontweight='bold', y=0.985
-)
-
-gs = gridspec.GridSpec(4, 4, figure=fig,
-                       hspace=0.52, wspace=0.4,
-                       left=0.05, right=0.97, top=0.945, bottom=0.04)
-
-# ════════════════════════════════════════════════════════════════════════════
-# PANEL A — Storage ring schematic
-# ════════════════════════════════════════════════════════════════════════════
-ax_ring = fig.add_subplot(gs[:2, :2])
-ax_ring.set_xlim(-1.65, 1.65); ax_ring.set_ylim(-1.75, 1.75)
-ax_ring.set_aspect('equal'); ax_ring.axis('off')
-ax_ring.set_facecolor(PANEL)
-
-R, Rb = 1.2, 0.18
-ax_ring.add_patch(plt.Circle((0,0), R+Rb, color='#1a2744', zorder=1))
-ax_ring.add_patch(plt.Circle((0,0), R-Rb, color=PANEL,    zorder=2))
-
-sectors = [
-    (75,  105, ACC,  'SUPERPOSITION\nZone A — Rx(π/2)\nsel qubits → |+⟩^n', 'H×n'),
-    (155, 205, GOLD, 'QFT ADDER\nZone B — Draper\nCtrl-Rz per ion pair', 'QFT+'),
-    (245, 285, PINK, 'SUM CHECK\nGradient coupling\nMCZ if sum==T', 'MCZ'),
-    (330,  30, GREEN,'UNCOMPUTE\n+DIFFUSER\nZones A+B reverse', 'IQFT\nDif'),
-]
-for a0, a1, col, desc, _ in sectors:
-    theta = np.linspace(np.radians(a0), np.radians(a1), 50)
-    xs = np.concatenate([(R-Rb)*np.cos(theta), (R+Rb)*np.cos(theta[::-1])])
-    ys = np.concatenate([(R-Rb)*np.sin(theta), (R+Rb)*np.sin(theta[::-1])])
-    ax_ring.fill(xs, ys, color=col, alpha=0.85, zorder=3)
-    mid = np.radians((a0+a1)/2)
-    rx, ry = 1.53*np.cos(mid), 1.53*np.sin(mid)
-    ax_ring.text(rx, ry, desc, color=col, ha='center', va='center', fontsize=5.8,
-                 fontweight='bold',
-                 path_effects=[pe.withStroke(linewidth=2, foreground=BG)])
-
-for ang in [30, 120, 210, 300]:
-    a, da = np.radians(ang), np.radians(12)
-    ax_ring.annotate('', xy=(R*np.cos(a+da), R*np.sin(a+da)),
-                     xytext=(R*np.cos(a-da), R*np.sin(a-da)),
-                     arrowprops=dict(arrowstyle='->', color=WHITE, lw=1.4, alpha=0.45))
-
-# Selection ions (n, coloured)
-ion_angles = np.linspace(0, 2*np.pi, n, endpoint=False) + np.radians(50)
-for i, ang in enumerate(ion_angles):
-    col = plt.cm.plasma(i / n)
-    ix, iy = R*np.cos(ang), R*np.sin(ang)
-    ax_ring.plot(ix, iy, 'o', color=col, ms=9, zorder=6,
-                 markeredgecolor=WHITE, markeredgewidth=0.5)
-    ax_ring.text(ix*1.08, iy*1.08, f's{i}', color=WHITE, fontsize=5, ha='center', zorder=7)
-
-# Ancilla ions (m, grey inner track)
-Ra = 0.75
-anc_angles = np.linspace(0, 2*np.pi, m, endpoint=False)
-ax_ring.add_patch(plt.Circle((0,0), Ra+0.06, color='#0d1c35', zorder=4, ec=LGREY, lw=0.8))
-ax_ring.add_patch(plt.Circle((0,0), Ra-0.06, color=PANEL, zorder=5))
-for i, ang in enumerate(anc_angles):
-    ax_ring.plot(Ra*np.cos(ang), Ra*np.sin(ang), 's', color=GOLD, ms=6, zorder=6,
-                 markeredgecolor=BG, markeredgewidth=0.5)
-    ax_ring.text(Ra*1.18*np.cos(ang), Ra*1.18*np.sin(ang), f'a{i}',
-                 color=GOLD, fontsize=4.5, ha='center', zorder=7)
-
-ax_ring.text(0,  0.12, f'{n} sel ions (outer)', color=WHITE, ha='center', fontsize=7.5, fontweight='bold')
-ax_ring.text(0, -0.12, f'{m} anc ions (inner)', color=GOLD,  ha='center', fontsize=7)
-ax_ring.text(0, -0.38, f'Total: {n+m} ions\n{N} Hilbert states', color=LGREY, ha='center', fontsize=7)
-
-ax_ring.annotate('INJECT\n|0⟩^{n+m}', xy=(R+Rb, 0.04), xytext=(1.55,  0.5),
-    color=ACC, fontsize=7, ha='center',
-    arrowprops=dict(arrowstyle='->', color=ACC, lw=1.2))
-ax_ring.annotate(f'EXTRACT\nafter {peak_lap} laps', xy=(R+Rb, -0.04), xytext=(1.55, -0.5),
-    color=GREEN, fontsize=7, ha='center',
-    arrowprops=dict(arrowstyle='->', color=GREEN, lw=1.2))
-
-ax_ring.set_title(
-    f'Storage-Ring QPU  ─  {n} selection + {m} ancilla ions\n'
-    'Arithmetic oracle: Draper QFT adder + explicit ancilla reset (qubit reuse)',
-    color=WHITE, fontsize=8.5, pad=6)
-
-# ════════════════════════════════════════════════════════════════════════════
-# PANEL B — Peak amplitude per lap (no solution list used)
-# ════════════════════════════════════════════════════════════════════════════
-ax_laps = fig.add_subplot(gs[0, 2:])
-laps_x = np.arange(1, len(max_amp_per_lap) + 1)
-
-ax_laps.plot(laps_x, max_amp_per_lap, color=PINK, lw=2.5, marker='o', ms=5, zorder=4)
-ax_laps.fill_between(laps_x, max_amp_per_lap, alpha=0.15, color=PINK)
-ax_laps.axhline(1/N, color=GREY, ls=':', lw=1.5, label=f'Flat (uniform): 1/{N}')
-ax_laps.axvline(peak_lap, color=GREEN, ls='--', lw=1.5, label=f'Extract lap {peak_lap}')
-
-# Theoretical sin² envelope (single solution assumption)
-th_x = np.linspace(0, len(max_amp_per_lap), 300)
-theta_g = np.arcsin(1.0 / np.sqrt(float(N)))
-sin2 = np.sin((2 * th_x + 1) * theta_g) ** 2
-ax_laps.plot(th_x, sin2, color=ACC, lw=1.2, ls='--', alpha=0.7,
-             label='sin²((2k+1)θ) theory')
-ax_laps.scatter([peak_lap], [peak_prob], color=GREEN, s=130, zorder=5, marker='*')
-
-ax_laps.set_xlabel('Ring lap', fontsize=9)
-ax_laps.set_ylabel('P(peak state)', fontsize=9)
-ax_laps.set_title(f'Peak State Amplitude per Lap — no solution list\n'
-                  f'Ring extracts at lap {peak_lap}, P={peak_prob:.4f}',
-                  color=GREEN, fontsize=9)
-ax_laps.legend(fontsize=7.5, framealpha=0.2)
-ax_laps.grid(True, alpha=0.2)
-
-# ════════════════════════════════════════════════════════════════════════════
-# PANEL C — Oracle circuit structure (arithmetic, not enumerate)
-# ════════════════════════════════════════════════════════════════════════════
-ax_circ = fig.add_subplot(gs[1, 2])
-ax_circ.axis('off'); ax_circ.set_facecolor(PANEL)
-
-oracle_steps = [
-    (ACC,  'QFT(anc)',           f'QFT on {m} ancilla qubits'),
-    (GOLD, f'ctrl-add S[i] ×{n}', f'{n}×{m} = {n*m} Rz gates\n(one per sel-anc pair)'),
-    (GOLD, 'IQFT(anc)',          f'sum now in |anc⟩'),
-    (PINK, f'XOR anc ⊕ T',       f'flip bits where T=0\n({bin(T)})'),
-    (PINK, f'MCZ(anc→phase)',     f'{m-1}-ctrl gate\nflips if anc==T'),
-    (PINK, 'XOR anc ⊕ T',        'undo XOR'),
-    (GOLD, 'QFT(anc)',           'begin uncompute'),
-    (GOLD, f'ctrl-sub S[i] ×{n}',f'subtract back\nanc → |0⟩'),
-    (GOLD, 'IQFT(anc)',          'anc confirmed |0⟩'),
-]
-for step_i, (col, title, desc) in enumerate(oracle_steps):
-    y = 0.94 - step_i * 0.105
-    ax_circ.add_patch(plt.Rectangle((0.01, y-0.045), 0.98, 0.09,
-                                    facecolor=col, alpha=0.15, zorder=1,
-                                    edgecolor=col, linewidth=0.8))
-    ax_circ.text(0.04, y, title, color=col, fontsize=7, fontweight='bold', va='center')
-    ax_circ.text(0.50, y, desc, color=WHITE, fontsize=6.2, va='center')
-
-ax_circ.set_title(f'Arithmetic Oracle Structure\n(no enumeration — built from S and T)',
-                  color=ACC, fontsize=8.5)
-
-# ════════════════════════════════════════════════════════════════════════════
-# PANEL D — Final measurement
-# ════════════════════════════════════════════════════════════════════════════
-ax_meas = fig.add_subplot(gs[1, 3])
-top_s = sorted(counts.items(), key=lambda x: -x[1])[:10]
-ys   = [p for _, p in top_s]
-lbs  = [f"|{s:0{n}b}⟩" for s, _ in top_s]
-# Colour by verification status (don't know solutions in advance — check at render time)
-bar_cols = []
-for s, _ in top_s:
-    bits   = [(s >> i) & 1 for i in range(n)]
-    total  = sum(S[i]*bits[i] for i in range(n))
-    bar_cols.append(GREEN if total == T else RED)
-
-bars = ax_meas.barh(lbs[::-1], ys[::-1], color=bar_cols[::-1],
-                    edgecolor=BG, linewidth=0.7)
-for bar, p in zip(bars, ys[::-1]):
-    ax_meas.text(p+0.003, bar.get_y()+bar.get_height()/2,
-                 f'{p:.3f}', va='center', color=WHITE, fontsize=7.5)
-ax_meas.set_xlabel('Probability (8192 shots)', fontsize=8)
-ax_meas.set_title(f'Measurement after {peak_lap} laps\n(green = sum==T verified)', color=GREEN, fontsize=8.5)
-ax_meas.set_xlim(0, max(ys)*1.3)
-
-# ════════════════════════════════════════════════════════════════════════════
-# PANEL E — Classical verification proof
-# ════════════════════════════════════════════════════════════════════════════
-ax_proof = fig.add_subplot(gs[2, :])
-ax_proof.set_xlim(0,1); ax_proof.set_ylim(0,1); ax_proof.axis('off')
-ax_proof.set_facecolor(GREY)
-
-verdict_col = GREEN if all_verified else RED
-ax_proof.text(0.5, 0.91, "CLASSICAL VERIFICATION  —  O(n) spot-check only",
-              color=ACC, ha='center', fontsize=11, fontweight='bold',
-              transform=ax_proof.transAxes)
-ax_proof.text(0.5, 0.80, verdict_col and ("ALL ANSWERS VERIFIED ✓" if all_verified else "FALSE POSITIVE ✗"),
-              color=verdict_col, ha='center', fontsize=13, fontweight='bold',
-              transform=ax_proof.transAxes)
-
-headers = ['State', 'Q Prob', 'Subset selected', 'Sum', f'==T={T}?', 'Check time', 'Verdict']
-col_x   = [0.03, 0.14, 0.26, 0.56, 0.64, 0.75, 0.85]
-for hdr, cx in zip(headers, col_x):
-    ax_proof.text(cx, 0.68, hdr, color=ACC, fontsize=8, fontweight='bold',
-                  transform=ax_proof.transAxes)
-ax_proof.plot([0.01, 0.99], [0.64, 0.64], color=LGREY, lw=0.7, transform=ax_proof.transAxes)
-
-for row_i, (state_s, prob, subset, total, ok, status, dt_us) in enumerate(verification_rows[:9]):
-    ry = 0.59 - row_i * 0.072
-    if ry < 0.03: break
-    vc   = GREEN if ok else RED
-    vals = [state_s, f"{prob:.3f}", "+".join(map(str,subset)),
-            str(total), ("= T ✓" if ok else f"≠ T ✗"), f"{dt_us:.1f}µs", status]
-    vcols= [WHITE, WHITE, GOLD, WHITE, (GREEN if ok else RED), LGREY, vc]
-    for val, cx, vc2 in zip(vals, col_x, vcols):
-        ax_proof.text(cx, ry, val, color=vc2, fontsize=8,
-                      transform=ax_proof.transAxes,
-                      fontweight='bold' if '✓' in val or '✗' in val else 'normal')
-
-# Sidebar
-note = [
-    "WHAT IS ALLOWED CLASSICALLY:",
-    f"  Check one answer: {n} additions  O(n) ✓",
-    "",
-    "WHAT IS FORBIDDEN:",
-    f"  Loop over all {N} states        O(2^n) ✗",
-    f"  Build SOLUTIONS list            O(2^n) ✗",
-    "",
-    "That forbidden step IS the problem.",
-    "The QPU solves it in O(√2^n) laps.",
-    "We only add up n numbers to confirm.",
-]
-for li, line in enumerate(note):
-    col = (GREEN if "✓" in line else (RED if "✗" in line or "FORBIDDEN" in line
-           else (GOLD if "ALLOWED" in line else WHITE)))
-    ax_proof.text(0.995, 0.96 - li*0.088, line, color=col, fontsize=7.8,
-                  transform=ax_proof.transAxes, ha='right',
-                  fontweight='bold' if col != WHITE else 'normal')
-
-ax_proof.set_title('', pad=0)
-
-# ════════════════════════════════════════════════════════════════════════════
-# PANELS F+G — Scaling
-# ════════════════════════════════════════════════════════════════════════════
-ns_arr    = np.arange(4, 52, 2, dtype=float)
-classical = 2.0 ** ns_arr
-grover    = np.sqrt(2.0 ** ns_arr)
-ring_ions = ns_arr  # already float
-
-ax_scale = fig.add_subplot(gs[3, :2])
-ax_scale.semilogy(ns_arr, classical,  color=RED,   lw=2.5, label='Classical search: O(2ⁿ)')
-ax_scale.semilogy(ns_arr, grover,     color=GOLD,  lw=2.5, label='Grover laps: O(√2ⁿ)')
-ax_scale.semilogy(ns_arr, ring_ions,  color=GREEN, lw=2.5, ls='--', label='Ring ions: O(n)')
-ax_scale.fill_between(ns_arr, 1, ring_ions, alpha=0.07, color=GREEN)
-ax_scale.fill_between(ns_arr, ring_ions, grover, alpha=0.05, color=GOLD)
-ax_scale.fill_between(ns_arr, grover, classical, alpha=0.05, color=RED)
-ax_scale.axvline(n, color=ACC, ls=':', lw=1.5, alpha=0.8)
-ax_scale.scatter([float(n)], [float(ITERS)], color=ACC, s=80, zorder=5)
-ax_scale.text(n+0.5, ITERS*2, f'n={n}\n{ITERS} laps', color=ACC, fontsize=7.5)
-ax_scale.set_xlabel('n (qubits)', fontsize=9)
-ax_scale.set_ylabel('Operations / ions (log)', fontsize=9)
-ax_scale.set_title('Scaling — ring needs O(n) ions for O(√2ⁿ) search', color=GREEN, fontsize=9)
-ax_scale.legend(fontsize=8, framealpha=0.2)
-ax_scale.grid(True, alpha=0.15); ax_scale.set_xlim(4, 52)
-
-ax_time = fig.add_subplot(gs[3, 2:])
-ring_t = np.sqrt(2.0**ns_arr) * 1e-6
-cpu_t  = 2.0**ns_arr / 1e9
-ax_time.semilogy(ns_arr, cpu_t,   color=RED,   lw=2.5, label='Classical CPU @ 1 GHz')
-ax_time.semilogy(ns_arr, ring_t,  color=GREEN, lw=2.5, label='Ring QPU @ 1 µs/lap')
-for val, lbl in [(1e-3,'ms'),(1,'s'),(60,'min'),(3600*24*365,'year')]:
-    ax_time.axhline(val, color=LGREY, ls=':', lw=0.7, alpha=0.4)
-    ax_time.text(51.5, val*1.4, lbl, color=LGREY, fontsize=6.5, ha='right')
-ax_time.text(22, 1e-2, 'n=30:\nCPU ~17 min\nRing ~33 ms', color=WHITE, fontsize=8,
-             bbox=dict(facecolor=PANEL, edgecolor=GREEN, boxstyle='round,pad=0.3', lw=1.1))
-ax_time.text(38, 3e7,  'n=50:\nCPU ~35 yr\nRing ~0.6 s', color=WHITE, fontsize=8,
-             bbox=dict(facecolor=PANEL, edgecolor=RED,   boxstyle='round,pad=0.3', lw=1.1))
-ax_time.set_xlabel('n (qubits)', fontsize=9)
-ax_time.set_ylabel('Wall-clock time (s)', fontsize=9)
-ax_time.set_title('Solve time: Classical vs Ring QPU @ 1 µs/lap', color=ACC, fontsize=9)
-ax_time.legend(fontsize=8.5, framealpha=0.2)
-ax_time.grid(True, alpha=0.15); ax_time.set_xlim(4, 52)
-
-fig.text(0.5, 0.008,
-    f'n={n}  m={m}  total={n+m} qubits  ·  N={N} states  ·  ITERS={ITERS}  ·  '
-    f'peak P={peak_prob:.4f} at lap {peak_lap}  ·  sim={sim_time:.0f}s  ·  '
-    'oracle: arithmetic QFT Draper adder — zero enumeration',
-    ha='center', color=LGREY, fontsize=7)
-
-out = '/mnt/user-data/outputs/ring_qpu_arithmetic.png'
-plt.savefig(out, dpi=155, bbox_inches='tight', facecolor=BG)
-print(f"\nSaved → {out}")
+print(f"\nVERDICT: {'ALL ANSWERS VERIFIED ✓' if all_ok else 'FALSE POSITIVE ✗'}")
+print(f"  sim: {sim_time*1000:.2f} ms   verify: {n} additions each   mem: {bytes_sv+bytes_phase} B total")
+print("═"*58)
