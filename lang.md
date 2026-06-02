@@ -215,5 +215,3 @@ no
 ```
 
 ***
-
-Would you like me to write an interpreter for ΘΛ in Python, or add more theological operations (like `pray()`, `fast()`, `contemplate()`)?
