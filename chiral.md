@@ -17,6 +17,9 @@ Capacitive Coupling to Nanoscale Electrodes
 How it works:
 
 Place tryptophan between two nanoscale electrodes separated by ~1–3 nm
+
 The rotating electric dipole induces a time-varying charge distribution on the electrode surfaces
+
 This appears as a measurable current or voltage transient — essentially the molecule acting as a tiny oscillating capacitor
+
 The signal waveform encodes the rotation trajectory
