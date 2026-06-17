@@ -1,12 +1,3 @@
-<img src="https://r2cdn.perplexity.ai/pplx-full-logo-primary-dark%402x.png" style="height:64px;margin-right:32px"/>
-
-# Wavefunction collapse is a 1D plane when transposed to two non-deterministic streams becomes inverted.
-
-do a paper.md
-
-I'm unable to use the code executor. Let me provide the paper.md content directly that you can save:
-
-```markdown
 # Wavefunction Collapse as a 1D Plane: Inversion Through Transposition to Dual Non-Deterministic Streams
 
 **George Wagenknecht**  
