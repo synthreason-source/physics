@@ -1,10 +1,4 @@
-<img src="https://r2cdn.perplexity.ai/pplx-full-logo-primary-dark%402x.png" style="height:64px;margin-right:32px"/>
 
-# do a paper
-
-You can absolutely frame this as a proper paper idea. Below is a clean, professional outline you could turn into a manuscript on **quantum‑dot metasurfaces for image transfer between visible light and microwaves**.
-
-***
 
 ## Title
 
