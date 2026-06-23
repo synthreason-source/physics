@@ -131,12 +131,6 @@ You can briefly discuss inverse methods: e.g., solving for $r(x,y)$ from measure
 
 Summarize the key idea: quantum dots as an optically addressable layer that writes an image into the local electromagnetic boundary conditions of a microwave metasurface, enabling image transfer between visible and RF domains. Emphasize novelty (cross‑spectral image modulation) and future work (higher resolution, quantum regime, structured single‑photon RF/optical fields).
 
-***
-
-If you’d like, I can next:
-
-- Draft a full introduction section in “paper prose” you could almost drop into a manuscript, or
-- Help you formalize the theory with a simple model (Bloch‑type for QDs + cavity model for the metasurface) and suggested equations.
 <span style="display:none">[^1][^10][^2][^3][^4][^5][^6][^7][^8][^9]</span>
 
 <div align="center">⁂</div>
