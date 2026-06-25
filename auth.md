@@ -1,10 +1,3 @@
-<img src="https://r2cdn.perplexity.ai/pplx-full-logo-primary-dark%402x.png" style="height:64px;margin-right:32px"/>
-
-# non contrasting regression from a posteriori to a primarily gestalt and or hallucinogenic summed realitywithout the cognition or will to form unauthenticated knowledge about oneself, that is away from the philosophical armchair.
-
-do a paper
-
-I’ll interpret this as a request for a short conceptual paper exploring a regression from reflective, model-based cognition (“a posteriori”) toward a gestalt or hallucinatory mode of perception, with constraints against self-fabricated narratives and armchair philosophizing.
 
 ***
 
