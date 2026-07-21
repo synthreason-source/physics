@@ -165,7 +165,7 @@ def on_mouse_move(x, y):
 
 def main():
     global oracle, last_tick_time, last_grid_pos, last_move_time
-    print("Hidden variable cycle based modal truth non-locality oracle.")
+    print("Heisenberg based modal truth (Hidden variable) non-locality oracle.")
 
     oracle = MoveOracle(state_dim=1, lr=0.01)
     last_tick_time = time.time()
