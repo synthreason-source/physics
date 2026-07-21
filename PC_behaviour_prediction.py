@@ -6,8 +6,7 @@ from pynput import mouse
 import psutil
 
 # -------------- Oracle ----------------
-# something magic, based photon-matter sync detector
-
+# magic neural net monitor
 class MoveOracle:
     def __init__(self, state_dim, lr=0.01):
         self.state_dim = state_dim
