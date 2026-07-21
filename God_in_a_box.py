@@ -165,8 +165,7 @@ def on_mouse_move(x, y):
 
 def main():
     global oracle, last_tick_time, last_grid_pos, last_move_time
-    print("Mouse+network modulus detector with movement oracle.")
-    print("No keyboard or clicks used. Ctrl+C to exit.\n")
+    print("Hidden variable cycle based modal truth non-locality oracle.")
 
     oracle = MoveOracle(state_dim=1, lr=0.01)
     last_tick_time = time.time()
