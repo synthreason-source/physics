@@ -361,7 +361,7 @@ class App:
         theta_scale = tk.Scale(
             focus_frame,
             from_=1.0,
-            to=60.0,
+            to=90.0,
             orient="horizontal",
             variable=theta_var,
             resolution=0.5,
