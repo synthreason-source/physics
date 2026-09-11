@@ -179,9 +179,12 @@ class IonAccelSim:
             self.B_theta(r_test, p["t_peak"], p["R_ch"], p["I_e_peak"], p["tau_L"], p["t_peak"])
         )
 
-        # a0 formula expects I in W/cm^2 directly (standard form uses I_18,
-        # i.e. intensity in units of 1e18 W/cm^2, and lambda in microns)
-        a0 = 0.85 * np.sqrt(p["I_laser_Wcm2"] * (lam_L * 1e6) ** 2 / 1.37e18)
+        # a0 formula: for linear polarization, a0 = 0.85*sqrt(I_18)*lambda_um,
+        # where I_18 is intensity in units of 1e18 W/cm^2. Written in terms of
+        # absolute intensity I [W/cm^2], that's a0 = sqrt(I*lambda_um^2/1.37e18)
+        # -- the 0.85 factor is already absorbed into the 1.37e18 constant
+        # (1/0.85^2 = 1.384 ~ 1.37), so it must NOT be applied a second time.
+        a0 = np.sqrt(p["I_laser_Wcm2"] * (lam_L * 1e6) ** 2 / 1.37e18)
 
         return particles, B_peak, a0
 
@@ -347,7 +350,7 @@ class App:
         p_scale = tk.Scale(
             power_frame,
             from_=0.0,   # 10^0 = 1 W
-            to=16.0,      # 10^6 = 1 MW
+            to=6.0,      # 10^6 = 1 MW
             orient="horizontal",
             variable=p_var,
             resolution=0.05,
@@ -361,7 +364,7 @@ class App:
         theta_scale = tk.Scale(
             focus_frame,
             from_=1.0,
-            to=90.0,
+            to=60.0,
             orient="horizontal",
             variable=theta_var,
             resolution=0.5,
@@ -510,7 +513,22 @@ class App:
         ax1.plot(tt * 1e15, sim.laser_envelope(tt, p["tau_L"], p["t_peak"]), color="teal", lw=2, label="Envelope")
         ax1.set_xlabel("Time [fs]")
         ax1.set_ylabel("Normalized Amplitude")
-        ax1.set_title(f"Laser Drive ($a_0$ = {a0:.3e}, field scale = {p['intensity_scale']:.2e})")
+        def fmt_intensity(I_Wcm2):
+            if I_Wcm2 < 1e3:
+                return f"{I_Wcm2:.3g} W/cm^2"
+            elif I_Wcm2 < 1e6:
+                return f"{I_Wcm2 / 1e3:.3g} kW/cm^2"
+            elif I_Wcm2 < 1e9:
+                return f"{I_Wcm2 / 1e6:.3g} MW/cm^2"
+            elif I_Wcm2 < 1e12:
+                return f"{I_Wcm2 / 1e9:.3g} GW/cm^2"
+            else:
+                return f"{I_Wcm2 / 1e12:.3g} TW/cm^2"
+
+        ax1.set_title(
+            f"Laser Drive ($I$ = {fmt_intensity(p['I_laser_Wcm2'])}, "
+            f"$a_0$ = {a0:.3e}, field scale = {p['intensity_scale']:.2e})"
+        )
         ax1.grid(alpha=0.3)
 
         # ------------------------------------------------------------------
@@ -553,7 +571,10 @@ class App:
         # Chart 4: Accelerated Ion Beam Kinetic Energy Spectrum
         # ------------------------------------------------------------------
         ax4 = self.fig.add_subplot(self.gs[1, 1])
-        summary_lines = []
+        summary_lines = [
+            f"Projected focused intensity: {fmt_intensity(p['I_laser_Wcm2'])} "
+            f"(a0={a0:.3e}, field scale={p['intensity_scale']:.2e})"
+        ]
 
         def fmt_energy_J(E_J):
             E_eV = E_J / e
