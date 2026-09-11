@@ -4,6 +4,20 @@ simulation, with sliders to customize all key parameters and a THIRD,
 user-adjustable "heavy projectile" ion species (mass and charge state are
 both sliders) alongside the H+ and D+ beams from the original figure.
 
+NOTE ON THE LASER INTENSITY SLIDER
+-----------------------------------
+This version sets the laser intensity slider to a "low intensity" range of
+10 W/cm^2 to 100 kW/cm^2, per user request. Be aware that the whole
+acceleration mechanism modeled here (relativistic self-focusing, MA-scale
+self-generated currents, megagauss azimuthal B-fields, GV/m sheath fields)
+is a *relativistic, ultra-high-intensity* laser-plasma effect that normally
+requires intensities of roughly 1e18-1e21 W/cm^2 (a0 ~ 1-100). At 10 W/cm^2
+- 100 kW/cm^2, the normalized vector potential a0 is on the order of 1e-8,
+so essentially none of the acceleration physics will turn on: ions will
+just show up with their initial thermal/drift velocities and the "peak"
+fields will be negligible. The slider and readout are wired correctly; the
+simulation itself doesn't lie about the (lack of) resulting physics.
+
 Run locally (requires a display):
 python3 ncd_ion_acceleration_tk.py
 
@@ -56,7 +70,7 @@ class IonAccelSim:
     def E_z_field(self, z, t, z_front, E0, sigma_z, tau_L, t_peak):
         return E0 * self.laser_envelope(t, tau_L, t_peak) * np.exp(-((z - z_front) ** 2) / (2 * sigma_z ** 2))
 
-    def E_r_field(self, r, t, R, tau_L, t_peak, E_r_peak=2e11):
+    def E_r_field(self, r, t, R, tau_L, t_peak, E_r_peak):
         return -E_r_peak * self.laser_envelope(t, tau_L, t_peak) * (r / R) * np.exp(-(r / (2 * R)) ** 2)
 
     def boris_push(self, x, y, z, ux, uy, uz, q, m, dt, t, z_front, p):
@@ -65,7 +79,7 @@ class IonAccelSim:
         Bmag = self.B_theta(r, t, p["R_ch"], p["I_e_peak"], p["tau_L"], p["t_peak"])
         Bx, By, Bz = -Bmag * sin_p, Bmag * cos_p, 0.0
 
-        Er = self.E_r_field(r, t, p["R_ch"], p["tau_L"], p["t_peak"])
+        Er = self.E_r_field(r, t, p["R_ch"], p["tau_L"], p["t_peak"], p["E_r_peak"])
         Ex, Ey = Er * cos_p, Er * sin_p
         Ez = self.E_z_field(z, t, z_front, p["E0_sheath"], p["sigma_z"], p["tau_L"], p["t_peak"])
 
@@ -165,6 +179,8 @@ class IonAccelSim:
             self.B_theta(r_test, p["t_peak"], p["R_ch"], p["I_e_peak"], p["tau_L"], p["t_peak"])
         )
 
+        # a0 formula expects I in W/cm^2 directly (standard form uses I_18,
+        # i.e. intensity in units of 1e18 W/cm^2, and lambda in microns)
         a0 = 0.85 * np.sqrt(p["I_laser_Wcm2"] * (lam_L * 1e6) ** 2 / 1.37e18)
 
         return particles, B_peak, a0
@@ -275,7 +291,29 @@ class App:
         ttk.Label(controls, text="Laser / Plasma Drive", font=("", 11, "bold")).pack(
             anchor="w", pady=(0, 4)
         )
-        add_slider("Laser intensity [x1e19 W/cm^2]", "I_laser", 1, 50, 5)
+
+        def intensity_readout(I_Wcm2):
+            if I_Wcm2 < 1e3:
+                return f"{I_Wcm2:.3g} W/cm^2"
+            elif I_Wcm2 < 1e6:
+                return f"{I_Wcm2 / 1e3:.3g} kW/cm^2"
+            else:
+                return f"{I_Wcm2 / 1e6:.3g} MW/cm^2"
+
+        # Low-intensity laser slider: 10 W/cm^2 to 100 kW/cm^2 (log scale,
+        # spans 4 orders of magnitude). See module docstring: at these
+        # intensities a0 << 1, so none of the relativistic acceleration
+        # mechanisms modeled below will actually activate.
+        add_log_slider(
+            "Laser intensity [W/cm^2]",
+            "I_laser_log10",
+            1.0,   # 10^1 = 10 W/cm^2
+            5.0,   # 10^5 = 100,000 W/cm^2 = 100 kW/cm^2
+            3.0,   # default 10^3 = 1 kW/cm^2
+            intensity_readout,
+            resolution=0.05,
+        )
+
         add_slider("Peak electron current I_e [MA]", "I_e_peak_MA", 1, 100, 40)
         add_slider("Channel radius R_ch [um]", "R_ch_um", 1.0, 10.0, 4.0)
         add_slider("Pulse duration tau_L [fs]", "tau_L_fs", 10, 80, 30)
@@ -350,13 +388,32 @@ class App:
         s = {k: v.get() for k, v in self.sliders.items()}
         R_ch = s["R_ch_um"] * 1e-6
         tau_L = s["tau_L_fs"] * 1e-15
+
+        I_laser_Wcm2 = 10 ** s["I_laser_log10"]
+
+        # The self-generated return current, sheath field, and radial
+        # E-field are all physically driven by the laser intensity. We tie
+        # them to the "Peak electron current" / "Sheath field" sliders
+        # (which set the amplitude at a reference intensity of 1e19 W/cm^2,
+        # the top of the original high-intensity slider range) scaled by
+        # how far the current laser intensity is from that reference. This
+        # way, dialing the laser down to a "low intensity" (10 W/cm^2 -
+        # 100 kW/cm^2) actually collapses the fields toward zero on every
+        # panel, instead of only changing the a0 number in the title.
+        I_ref_Wcm2 = 1e19
+        intensity_scale = I_laser_Wcm2 / I_ref_Wcm2
+
+        E_r_peak_ref = 2e11  # reference radial field amplitude, V/m, at I_ref
+
         params = dict(
-            I_laser_Wcm2=s["I_laser"] * 1e19,
-            I_e_peak=s["I_e_peak_MA"] * 1e6,
+            I_laser_Wcm2=I_laser_Wcm2,
+            intensity_scale=intensity_scale,
+            I_e_peak=s["I_e_peak_MA"] * 1e6 * intensity_scale,
             R_ch=R_ch,
             tau_L=tau_L,
             t_peak=2 * tau_L,
-            E0_sheath=s["E0_sheath_e13"] * 1e13,
+            E0_sheath=s["E0_sheath_e13"] * 1e13 * intensity_scale,
+            E_r_peak=E_r_peak_ref * intensity_scale,
             sigma_z=1.5 * R_ch,
             v_front0=s["v_front_c"] * c,
             v_drift_frac=s["v_drift_c"],
@@ -387,7 +444,7 @@ class App:
         ax1.plot(tt * 1e15, sim.laser_envelope(tt, p["tau_L"], p["t_peak"]), color="teal", lw=2, label="Envelope")
         ax1.set_xlabel("Time [fs]")
         ax1.set_ylabel("Normalized Amplitude")
-        ax1.set_title(f"Laser Drive ($a_0$ = {a0:.2f})")
+        ax1.set_title(f"Laser Drive ($a_0$ = {a0:.3e}, field scale = {p['intensity_scale']:.2e})")
         ax1.grid(alpha=0.3)
 
         # ------------------------------------------------------------------
@@ -395,15 +452,14 @@ class App:
         # ------------------------------------------------------------------
         ax2 = self.fig.add_subplot(self.gs[0, 1])
         r_um = np.linspace(0, 3 * p["R_ch"], 300) * 1e6
-        Bvals = (
-            sim.B_theta(r_um * 1e-6, p["t_peak"], p["R_ch"], p["I_e_peak"], p["tau_L"], p["t_peak"])
-            / 1e6
+        Bvals = sim.B_theta(
+            r_um * 1e-6, p["t_peak"], p["R_ch"], p["I_e_peak"], p["tau_L"], p["t_peak"]
         )
         ax2.plot(r_um, Bvals, color="green", lw=2, label="$B_\\theta$")
         ax2.axvline(p["R_ch"] * 1e6, color="k", ls=":", alpha=0.5, label="Channel Edge")
         ax2.set_xlabel("Radius $r$ [um]")
-        ax2.set_ylabel("Magnetic Field [MT]")
-        ax2.set_title(f"Self-Generated B-Field (Peak {B_peak / 1e6:.2f} MT)")
+        ax2.set_ylabel("Magnetic Field [T]")
+        ax2.set_title(f"Self-Generated B-Field (Peak {B_peak:.2e} T)")
         ax2.legend(fontsize=8, loc="upper right")
         ax2.grid(alpha=0.3)
 
