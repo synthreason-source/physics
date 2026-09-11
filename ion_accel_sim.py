@@ -308,7 +308,7 @@ class App:
             "Laser intensity [W/cm^2]",
             "I_laser_log10",
             1.0,   # 10^1 = 10 W/cm^2
-            5.0,   # 10^5 = 100,000 W/cm^2 = 100 kW/cm^2
+            50.0,   # 10^5 = 100,000 W/cm^2 = 100 kW/cm^2
             3.0,   # default 10^3 = 1 kW/cm^2
             intensity_readout,
             resolution=0.05,
