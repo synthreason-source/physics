@@ -290,7 +290,7 @@ class App:
         ttk.Label(
             controls,
             text="Heavy Projectile (custom, up to macroscopic!)",
-            font=("", 11, "bold"),
+            font=("", 9, "bold"),
         ).pack(anchor="w", pady=(10, 4))
 
         def mass_readout(mass_g):
