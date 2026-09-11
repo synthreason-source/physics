@@ -1,4 +1,3 @@
-
 """
 Interactive Tkinter version of the reduced-model NCD channel ion-acceleration
 simulation, with sliders to customize all key parameters and a THIRD,
@@ -271,7 +270,7 @@ class App:
             )
             s.pack(fill="x")
             ttk.Label(frame, textvariable=readout, foreground="#0a5").pack(anchor="w")
-            self.sliders[key] = var  # stores the LOG10 value; decode at use-time
+            self.sliders[key] = var
 
         ttk.Label(controls, text="Laser / Plasma Drive", font=("", 11, "bold")).pack(
             anchor="w", pady=(0, 4)
@@ -307,7 +306,6 @@ class App:
         def charge_readout(Z):
             return f"{Z:.3g} elementary charges ({Z * e:.2e} C)"
 
-        # log10(mass in grams): -23 ~ a single proton, 0 ~ 1 gram, up to +1 ~ 10 grams
         add_log_slider(
             "Projectile mass [log10 grams]",
             "heavy_mass_log10_g",
@@ -317,8 +315,6 @@ class App:
             mass_readout,
             resolution=0.1,
         )
-        # log10(charge state in units of e): up to 1e9 elementary charges...
-        # (a macroscopic pellet needs an enormous charge to feel the fields at all)
         add_log_slider(
             "Projectile charge [log10 e]",
             "heavy_charge_log10_e",
@@ -383,27 +379,37 @@ class App:
         self.fig.clear()
         self.gs = GridSpec(2, 2, figure=self.fig, hspace=0.4, wspace=0.3)
 
+        # ------------------------------------------------------------------
+        # Chart 1: Laser Drive Envelope
+        # ------------------------------------------------------------------
         ax1 = self.fig.add_subplot(self.gs[0, 0])
         tt = np.linspace(0, 4 * p["tau_L"], 400)
-        ax1.plot(tt * 1e15, sim.laser_envelope(tt, p["tau_L"], p["t_peak"]), color="teal", lw=2)
-        ax1.set_xlabel("time [fs]")
-        ax1.set_ylabel("laser envelope")
-        ax1.set_title(f"Laser Drive (a0 = {a0:.2f})")
+        ax1.plot(tt * 1e15, sim.laser_envelope(tt, p["tau_L"], p["t_peak"]), color="teal", lw=2, label="Envelope")
+        ax1.set_xlabel("Time [fs]")
+        ax1.set_ylabel("Normalized Amplitude")
+        ax1.set_title(f"Laser Drive ($a_0$ = {a0:.2f})")
         ax1.grid(alpha=0.3)
 
+        # ------------------------------------------------------------------
+        # Chart 2: Self-Generated Azimuthal Magnetic Field
+        # ------------------------------------------------------------------
         ax2 = self.fig.add_subplot(self.gs[0, 1])
         r_um = np.linspace(0, 3 * p["R_ch"], 300) * 1e6
         Bvals = (
             sim.B_theta(r_um * 1e-6, p["t_peak"], p["R_ch"], p["I_e_peak"], p["tau_L"], p["t_peak"])
             / 1e6
         )
-        ax2.plot(r_um, Bvals, color="green", lw=2)
-        ax2.axvline(p["R_ch"] * 1e6, color="k", ls=":", alpha=0.5)
-        ax2.set_xlabel("r [um]")
-        ax2.set_ylabel("B_theta [MT]")
-        ax2.set_title(f"Self-Generated B-Field (peak {B_peak / 1e6:.2f} MT)")
+        ax2.plot(r_um, Bvals, color="green", lw=2, label="$B_\\theta$")
+        ax2.axvline(p["R_ch"] * 1e6, color="k", ls=":", alpha=0.5, label="Channel Edge")
+        ax2.set_xlabel("Radius $r$ [um]")
+        ax2.set_ylabel("Magnetic Field [MT]")
+        ax2.set_title(f"Self-Generated B-Field (Peak {B_peak / 1e6:.2f} MT)")
+        ax2.legend(fontsize=8, loc="upper right")
         ax2.grid(alpha=0.3)
 
+        # ------------------------------------------------------------------
+        # Chart 3: Ion Focusing & Phase Space Transport
+        # ------------------------------------------------------------------
         ax3 = self.fig.add_subplot(self.gs[1, 0])
         for name, P in particles.items():
             tr_r = np.array(P["traj_r"]) * 1e6
@@ -415,13 +421,15 @@ class App:
             ax3.plot([], [], color=P["color"], label=name)
         ax3.axhline(0, color="k", lw=1, alpha=0.4)
         ax3.set_ylim(0, p["R_ch"] * 1.4e6)
-        ax3.set_xlabel("z [um]")
-        ax3.set_ylabel("r [um]")
+        ax3.set_xlabel("Longitudinal Position $z$ [um]")
+        ax3.set_ylabel("Radial Position $r$ [um]")
         ax3.set_title("Ion Focusing & Transport")
-        ax3.legend(fontsize=8)
+        ax3.legend(fontsize=8, loc="upper right")
         ax3.grid(alpha=0.3)
-       
 
+        # ------------------------------------------------------------------
+        # Chart 4: Accelerated Ion Beam Kinetic Energy Spectrum
+        # ------------------------------------------------------------------
         ax4 = self.fig.add_subplot(self.gs[1, 1])
         summary_lines = []
 
@@ -442,25 +450,32 @@ class App:
             KE_J = (P["gamma"] - 1) * P["m"] * c ** 2
             KE_MeV = KE_J / e / 1e6
 
-            # Always plot, but guard against all-zero or NaN
-            if KE_MeV.size > 0 and np.isfinite(KE_MeV).any():
+            # Exclude Heavy species from the light-ion MeV histogram to prevent axis distortion
+            if name != "Heavy" and KE_MeV.size > 0 and np.isfinite(KE_MeV).any() and KE_MeV.max() > 1e-6:
                 ax4.hist(KE_MeV, bins=30, alpha=0.55, color=P["color"], label=name, density=True)
 
             mean_str = fmt_energy_J((P["gamma"] - 1).mean() * P["m"] * c ** 2)
             max_str = fmt_energy_J(KE_J.max())
-            v_final_frac_c = (np.sqrt(P["ux"] ** 2 + P["uy"] ** 2 + P["uz"] ** 2) / (P["gamma"] * c)).mean()
+
+            v_x = P["ux"] / P["gamma"]
+            v_y = P["uy"] / P["gamma"]
+            v_z = P["uz"] / P["gamma"]
+            v_total = np.sqrt(v_x**2 + v_y**2 + v_z**2)
+
+            v_avg_frac_c = v_total.mean() / c
+            v_z_avg_frac_c = v_z.mean() / c
+
             summary_lines.append(
                 f"{name} (m={P['m']:.3e} kg, q={P['q'] / e:.3g} e): "
-                f"mean={mean_str}, max={max_str}, v̄={v_final_frac_c:.2e} c"
+                f"mean={mean_str}, max={max_str}, "
+                f"v_total_avg={v_avg_frac_c:.3e} c, v_z_avg={v_z_avg_frac_c:.3e} c"
             )
 
-        ax4.set_xscale("log")
-        ax4.set_xlabel("Ion kinetic energy [MeV] (log scale)")
-        ax4.set_ylabel("normalized yield")
+        ax4.set_xlabel("Kinetic Energy [MeV] (Light species)")
+        ax4.set_ylabel("Normalized Yield")
         ax4.set_title("Accelerated Ion Beam Spectrum")
-        ax4.legend(fontsize=8)
-        ax4.grid(alpha=0.3, which="both")
-               
+        ax4.legend(fontsize=8, loc="upper right")
+        ax4.grid(alpha=0.3)
 
         self.canvas.draw()
         self.status.set("Done.\n" + "\n".join(summary_lines))
@@ -470,4 +485,3 @@ if __name__ == "__main__":
     root = tk.Tk()
     app = App(root)
     root.mainloop()
-
