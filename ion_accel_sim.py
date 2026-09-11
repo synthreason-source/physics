@@ -347,7 +347,7 @@ class App:
         p_scale = tk.Scale(
             power_frame,
             from_=0.0,   # 10^0 = 1 W
-            to=6.0,      # 10^6 = 1 MW
+            to=16.0,      # 10^6 = 1 MW
             orient="horizontal",
             variable=p_var,
             resolution=0.05,
