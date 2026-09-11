@@ -426,7 +426,6 @@ class App:
         summary_lines = []
 
         def fmt_energy_J(E_J):
-            """Auto-pick a sane unit for wildly different energy scales."""
             E_eV = E_J / e
             if E_eV < 1e3:
                 return f"{E_eV:.3g} eV"
@@ -442,25 +441,26 @@ class App:
         for name, P in particles.items():
             KE_J = (P["gamma"] - 1) * P["m"] * c ** 2
             KE_MeV = KE_J / e / 1e6
-            # Only histogram species whose energies are in a plottable MeV-ish range;
-            # a gram-scale projectile's KE_MeV will be ~0, so skip its histogram
-            # (it would just be an invisible spike at x=0) but still report it.
-            if KE_MeV.max() > 1e-6:
+
+            # Always plot, but guard against all-zero or NaN
+            if KE_MeV.size > 0 and np.isfinite(KE_MeV).any():
                 ax4.hist(KE_MeV, bins=30, alpha=0.55, color=P["color"], label=name, density=True)
+
             mean_str = fmt_energy_J((P["gamma"] - 1).mean() * P["m"] * c ** 2)
             max_str = fmt_energy_J(KE_J.max())
             v_final_frac_c = (np.sqrt(P["ux"] ** 2 + P["uy"] ** 2 + P["uz"] ** 2) / (P["gamma"] * c)).mean()
             summary_lines.append(
                 f"{name} (m={P['m']:.3e} kg, q={P['q'] / e:.3g} e): "
-                f"mean={mean_str}, max={max_str}, v_avg={v_final_frac_c:.2e} c"
+                f"mean={mean_str}, max={max_str}, v̄={v_final_frac_c:.2e} c"
             )
-        ax4.set_xlabel(
-            "Ion kinetic energy [MeV] (macroscopic species may not show — see readout)"
-        )
+
+        ax4.set_xscale("log")
+        ax4.set_xlabel("Ion kinetic energy [MeV] (log scale)")
         ax4.set_ylabel("normalized yield")
         ax4.set_title("Accelerated Ion Beam Spectrum")
         ax4.legend(fontsize=8)
-        ax4.grid(alpha=0.3)
+        ax4.grid(alpha=0.3, which="both")
+               
 
         self.canvas.draw()
         self.status.set("Done.\n" + "\n".join(summary_lines))
