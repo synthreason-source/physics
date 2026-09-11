@@ -300,19 +300,79 @@ class App:
             else:
                 return f"{I_Wcm2 / 1e6:.3g} MW/cm^2"
 
-        # Low-intensity laser slider: 10 W/cm^2 to 100 kW/cm^2 (log scale,
-        # spans 4 orders of magnitude). See module docstring: at these
-        # intensities a0 << 1, so none of the relativistic acceleration
-        # mechanisms modeled below will actually activate.
-        add_log_slider(
-            "Laser intensity [W/cm^2]",
-            "I_laser_log10",
-            1.0,   # 10^1 = 10 W/cm^2
-            50.0,   # 10^5 = 100,000 W/cm^2 = 100 kW/cm^2
-            3.0,   # default 10^3 = 1 kW/cm^2
-            intensity_readout,
+        def power_readout(P_W):
+            if P_W < 1e3:
+                return f"{P_W:.3g} W"
+            elif P_W < 1e6:
+                return f"{P_W / 1e3:.3g} kW"
+            else:
+                return f"{P_W / 1e6:.3g} MW"
+
+        def focal_spot_from(P_W, theta_deg):
+            """Diffraction-limited focus: NA = sin(theta), w0 = lambda/(pi*NA),
+            peak on-axis Gaussian intensity I = 2P / (pi w0^2)."""
+            NA = np.sin(np.radians(max(theta_deg, 0.01)))
+            lam_cm = lam_L * 100.0  # m -> cm
+            w0_cm = lam_cm / (np.pi * max(NA, 1e-6))
+            area_cm2 = np.pi * w0_cm ** 2
+            I_Wcm2 = 2 * P_W / area_cm2
+            spot_diam_um = 2 * w0_cm * 1e4  # cm -> um
+            return I_Wcm2, spot_diam_um, NA
+
+        # --- Laser power (log slider, low-power range: 1 W to 1 MW) ---
+        power_frame = ttk.Frame(controls)
+        power_frame.pack(fill="x", pady=4)
+        ttk.Label(power_frame, text="Laser power P [W]").pack(anchor="w")
+        p_var = tk.DoubleVar(value=2.0)  # log10(100 W)
+        p_readout_var = tk.StringVar()
+        self.sliders["P_laser_log10"] = p_var
+
+        # --- Focusing lens half-angle (the "degrees" control) ---
+        focus_frame = ttk.Frame(controls)
+        focus_frame.pack(fill="x", pady=4)
+        ttk.Label(focus_frame, text="Lens focusing half-angle theta [deg]").pack(anchor="w")
+        theta_var = tk.DoubleVar(value=15.0)
+        focus_readout_var = tk.StringVar()
+        self.sliders["focus_angle_deg"] = theta_var
+
+        def update_focus_readouts(*_args):
+            P_W = 10 ** p_var.get()
+            theta_deg = theta_var.get()
+            I_Wcm2, spot_diam_um, NA = focal_spot_from(P_W, theta_deg)
+            p_readout_var.set(power_readout(P_W))
+            focus_readout_var.set(
+                f"NA={NA:.3f}, spot dia={spot_diam_um:.3g} um -> {intensity_readout(I_Wcm2)}"
+            )
+
+        p_scale = tk.Scale(
+            power_frame,
+            from_=0.0,   # 10^0 = 1 W
+            to=6.0,      # 10^6 = 1 MW
+            orient="horizontal",
+            variable=p_var,
             resolution=0.05,
+            length=260,
+            showvalue=False,
+            command=update_focus_readouts,
         )
+        p_scale.pack(fill="x")
+        ttk.Label(power_frame, textvariable=p_readout_var, foreground="#0a5").pack(anchor="w")
+
+        theta_scale = tk.Scale(
+            focus_frame,
+            from_=1.0,
+            to=60.0,
+            orient="horizontal",
+            variable=theta_var,
+            resolution=0.5,
+            length=260,
+            showvalue=True,
+            command=update_focus_readouts,
+        )
+        theta_scale.pack(fill="x")
+        ttk.Label(focus_frame, textvariable=focus_readout_var, foreground="#0a5").pack(anchor="w")
+
+        update_focus_readouts()  # initialize both readouts
 
         add_slider("Peak electron current I_e [MA]", "I_e_peak_MA", 1, 100, 40)
         add_slider("Channel radius R_ch [um]", "R_ch_um", 1.0, 10.0, 4.0)
@@ -389,7 +449,13 @@ class App:
         R_ch = s["R_ch_um"] * 1e-6
         tau_L = s["tau_L_fs"] * 1e-15
 
-        I_laser_Wcm2 = 10 ** s["I_laser_log10"]
+        P_laser_W = 10 ** s["P_laser_log10"]
+        theta_deg = s["focus_angle_deg"]
+        NA = np.sin(np.radians(max(theta_deg, 0.01)))
+        lam_cm = lam_L * 100.0  # m -> cm
+        w0_cm = lam_cm / (np.pi * max(NA, 1e-6))
+        area_cm2 = np.pi * w0_cm ** 2
+        I_laser_Wcm2 = 2 * P_laser_W / area_cm2  # focused peak intensity
 
         # The self-generated return current, sheath field, and radial
         # E-field are all physically driven by the laser intensity. We tie
