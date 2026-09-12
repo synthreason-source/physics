@@ -1,0 +1,437 @@
+<!doctype html>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-mono,'Courier New',monospace);background:#060c06}
+.dash{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:auto auto;gap:8px;padding:8px;background:#060c06}
+.panel{background:#0a150a;border:1px solid #1a3a1a;border-radius:4px;padding:10px;overflow:hidden}
+.panel::before{content:'';display:block;height:1px;background:linear-gradient(90deg,transparent,#2a6a2a33,transparent);margin:-10px -10px 10px}
+.ptitle{font-size:10px;letter-spacing:1.1px;text-transform:uppercase;margin-bottom:8px;padding-left:6px;border-left:2px solid #2a6a2a;color:#3a7a3a}
+canvas{display:block;width:100%!important}
+.controls{display:flex;align-items:center;gap:8px;padding:6px 10px;background:#060c06;border-bottom:1px solid #1a3a1a;flex-wrap:wrap}
+.controls label{font-size:10px;color:#4a9a4a}
+select,input[type=range]{background:#0a150a;border:1px solid #2a5a2a;color:#88cc88;font-size:10px;padding:2px 4px;border-radius:2px}
+.btn{background:#0a200a;border:1px solid #2a6a2a;color:#66cc66;font-size:10px;padding:3px 9px;border-radius:2px;cursor:pointer;letter-spacing:.4px}
+.btn:hover{background:#142814}
+.btn.danger{border-color:#aa3322;color:#ff7744}
+.btn.danger:hover{background:#1a0808}
+.live-dot{width:6px;height:6px;border-radius:50%;background:#00ff44;display:inline-block;animation:blink 1s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+.drift-badge{display:none;font-size:9px;padding:1px 6px;border-radius:2px;border:1px solid #cc4422;color:#ff7744;letter-spacing:.6px;animation:dblink 1.2s infinite}
+@keyframes dblink{0%,100%{opacity:1}50%{opacity:.55}}
+/* stat boxes */
+.srow{display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap}
+.sbox{flex:1;min-width:70px;background:#060c06;border:1px solid #1a3a1a;border-radius:3px;padding:5px 8px;text-align:center}
+.sval{font-size:19px;font-weight:bold;line-height:1.1;font-family:monospace}
+.slbl{font-size:8px;color:#3a6a3a;margin-top:2px;letter-spacing:.5px}
+/* legend */
+.leg{display:flex;gap:10px;align-items:center;margin-bottom:4px}
+.leg-dot{width:10px;height:3px;border-radius:2px;display:inline-block;margin-right:3px}
+.leg-lbl{font-size:9px}
+/* bar chart for hit rate */
+.bars{display:flex;align-items:flex-end;gap:4px;height:32px;margin-top:4px}
+.bar{border-radius:2px 2px 0 0;transition:height .5s,width .5s;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:bold;color:#060c06;min-width:24px}
+/* small stat rows in panel 4 */
+.sr{display:flex;justify-content:space-between;font-size:9px;color:#3a6a3a;padding:2px 0;border-bottom:1px solid #0e1e0e}
+.sr span{color:#77aa77}
+.sr span.hi{color:#44ff88}.sr span.warn{color:#ffaa33}.sr span.info{color:#88aaff}
+/* proof score */
+.proof-meter{height:6px;border-radius:3px;background:#0a180a;overflow:hidden;margin:3px 0}
+.proof-fill{height:100%;border-radius:3px;transition:width .4s}
+</style>
+
+<div style="background:#060c06;min-height:540px">
+
+<!-- Controls -->
+<div class="controls" id="ctrlBar">
+  <span class="live-dot" style="margin-right:2px"></span>
+  <span style="color:#77cc88;font-weight:bold;font-size:11px;letter-spacing:.8px">ECDF vs PLAIN — PROOF PERFORMANCE</span>
+  <label>diff: <select id="diffSel">
+    <option value="512">512</option><option value="1024" selected>1024</option><option value="2048">2048</option>
+  </select></label>
+  <label>target p: <input type="range" id="confSl" min="55" max="99" value="90" style="width:56px"> <span id="confVal">90%</span></label>
+  <label>drift ×: <input type="range" id="driftSl" min="11" max="40" value="20" style="width:56px"> <span id="driftVal">2.0×</span></label>
+  <button class="btn danger" id="driftBtn" onclick="injectDrift()">⚡ inject drift</button>
+  <span class="drift-badge" id="driftBadge">DRIFT ACTIVE</span>
+  <label>rate: <select id="rateSel"><option value="fast">fast</option><option value="normal" selected>normal</option><option value="slow">slow</option></select></label>
+  <button class="btn" onclick="resetAll()">reset</button>
+  <span id="tickLbl" style="margin-left:auto;font-size:10px;color:#3a6a3a"></span>
+</div>
+
+<div class="dash">
+
+<!-- Panel 1: Rolling hit rate -->
+<div class="panel">
+  <div class="ptitle">Rolling hit rate — 30-window  (same nonce stream, both miners)</div>
+  <div class="leg">
+    <span><span class="leg-dot" style="background:#44ff88"></span><span class="leg-lbl" style="color:#44ff88">ECDF proof miner</span></span>
+    <span><span class="leg-dot" style="background:#ffaa33"></span><span class="leg-lbl" style="color:#ffaa33">plain miner (w=diff)</span></span>
+    <span><span class="leg-dot" style="background:#ffffff44;border:1px dashed #fff5"></span><span class="leg-lbl" style="color:#556655">target p</span></span>
+  </div>
+  <div style="position:relative;height:180px"><canvas id="c1"></canvas></div>
+  <div style="display:flex;gap:12px;margin-top:5px;font-size:10px;color:#4a8a4a">
+    ECDF: <span id="s1_ehr" style="color:#44ff88;font-weight:bold">—</span>
+    &nbsp;plain: <span id="s1_phr" style="color:#ffaa33;font-weight:bold">—</span>
+    &nbsp;<span style="color:#3a6a3a">|</span>&nbsp;
+    enhancement: <span id="s1_enh" style="color:#88aaff;font-weight:bold">—</span>
+  </div>
+</div>
+
+<!-- Panel 2: Miss rate + wasted cycles -->
+<div class="panel">
+  <div class="ptitle">Cumulative miss rate — wasted scan cycles (lower = better)</div>
+  <div class="leg">
+    <span><span class="leg-dot" style="background:#44ff88"></span><span class="leg-lbl" style="color:#44ff88">ECDF misses/attempts</span></span>
+    <span><span class="leg-dot" style="background:#ffaa33"></span><span class="leg-lbl" style="color:#ffaa33">plain misses/attempts</span></span>
+  </div>
+  <div style="position:relative;height:180px"><canvas id="c2"></canvas></div>
+  <div style="display:flex;gap:12px;margin-top:5px;font-size:10px;color:#4a8a4a">
+    ECDF miss: <span id="s2_em" style="color:#44ff88;font-weight:bold">—</span>
+    &nbsp;plain miss: <span id="s2_pm" style="color:#ffaa33;font-weight:bold">—</span>
+    &nbsp;cycles saved: <span id="s2_sv" style="color:#88aaff;font-weight:bold">—</span>
+  </div>
+</div>
+
+<!-- Panel 3: Enhancement ratio -->
+<div class="panel">
+  <div class="ptitle">Hit-rate enhancement ratio  ECDF ÷ plain  (1.0 = parity)</div>
+  <div style="position:relative;height:170px"><canvas id="c3"></canvas></div>
+  <div style="display:flex;gap:14px;margin-top:5px;font-size:10px;color:#4a8a4a">
+    current: <span id="s3_cur" style="color:#88aaff;font-weight:bold">—</span>
+    &nbsp;peak: <span id="s3_pk" style="color:#88aaff;font-weight:bold">—</span>
+    &nbsp;proof state: <span id="s3_ps" style="font-weight:bold">—</span>
+  </div>
+</div>
+
+<!-- Panel 4: Live stats comparison -->
+<div class="panel">
+  <div class="ptitle">Live performance — at-a-glance</div>
+
+  <div class="srow">
+    <div class="sbox">
+      <div class="sval" id="b_ehr" style="color:#44ff88">—</div>
+      <div class="slbl">ECDF P(hit)</div>
+    </div>
+    <div class="sbox">
+      <div class="sval" id="b_phr" style="color:#ffaa33">—</div>
+      <div class="slbl">plain P(hit)</div>
+    </div>
+    <div class="sbox">
+      <div class="sval" id="b_enh" style="color:#88aaff">—</div>
+      <div class="slbl">enhancement</div>
+    </div>
+  </div>
+
+  <div class="bars">
+    <span style="font-size:8px;color:#3a6a3a;padding-bottom:2px;margin-right:2px">hit%</span>
+    <div id="barE" class="bar" style="background:#44ff8888;width:28px;height:36px">—</div>
+    <div id="barP" class="bar" style="background:#ffaa3388;width:28px;height:23px">—</div>
+  </div>
+
+  <div style="margin-top:8px">
+    <div class="sr">ECDF window  <span id="d_ew">—</span></div>
+    <div class="sr">plain window  <span>= diff always</span></div>
+    <div class="sr">ECDF μ̂ (fitted)  <span id="d_mu">—</span></div>
+    <div class="sr">actual μ  <span id="d_am" class="warn">—</span></div>
+    <div class="sr">ECDF shares  <span id="d_es" class="hi">0</span>  &nbsp;plain shares  <span id="d_ps" class="warn">0</span></div>
+    <div class="sr">
+      ECDF KS proof score
+      <span id="d_ks" class="info">—</span>
+    </div>
+  </div>
+  <div class="proof-meter" style="margin-top:3px">
+    <div class="proof-fill" id="proofFill" style="width:0%;background:#44ff8866"></div>
+  </div>
+  <div style="display:flex;justify-content:space-between;font-size:8px;color:#2a4a2a;margin-top:1px">
+    <span>no proof</span><span>KS verified ✓</span>
+  </div>
+</div>
+
+</div><!-- .dash -->
+</div><!-- wrapper -->
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+// ─── ECDF core ────────────────────────────────────────────────────────────────
+function ecdfReset(){return{mean:0,m2:0,n:0,fitted:false,gaps:[]}}
+
+function ecdfAdd(s,g){
+  s.n++;s.gaps.push(g);if(s.gaps.length>300)s.gaps.shift();
+  const d=g-s.mean;s.mean+=d/s.n;const d2=g-s.mean;s.m2+=d*d2;
+  s.fitted=s.n>=8;
+}
+
+function ecdfWindow(s,p){
+  if(!s.fitted||s.mean<=0)return getDiff();
+  return Math.max(1,Math.round(-s.mean*Math.log(1-Math.max(0.01,Math.min(0.999,p)))));
+}
+
+function ksScore(gaps,mu){
+  // Returns 0..1; 1 = perfectly proved Exp(1), 0 = no proof
+  if(!gaps||gaps.length<2||mu<=0)return 0;
+  const s=[...gaps].sort((a,b)=>a-b),n=s.length;
+  let d=0;
+  for(let i=0;i<n;i++){
+    const F=1-Math.exp(-s[i]/mu);
+    d=Math.max(d,Math.abs((i+1)/n-F),Math.abs(i/n-F));
+  }
+  const crit=1.36/Math.sqrt(n);
+  // Score: 1 when d=0, 0 when d≥crit, linear between
+  return Math.max(0,Math.min(1,(crit-d)/crit));
+}
+
+function getDiff(){return +document.getElementById('diffSel').value}
+function getConf(){return +document.getElementById('confSl').value/100}
+
+// ─── Simulation state ─────────────────────────────────────────────────────────
+let ecdf  ={state:ecdfReset(),shares:0,misses:0,att:0,hist:[],win:0};
+let plain_ ={shares:0,misses:0,att:0,hist:[]};
+let actualMean=getDiff();
+let driftActive=false, driftTick=null;
+let tickN=0, peakRatio=1;
+const MAX=160, ROLL=30;
+
+// Chart data
+let tArr=[],e_hr=[],p_hr=[],e_mr=[],p_mr=[],ratioArr=[];
+
+function pushTrim(arr,v,m){arr.push(v);if(arr.length>m)arr.shift()}
+
+// ─── Tick — both miners see identical gap ─────────────────────────────────────
+function tick(){
+  tickN++;
+  const d=getDiff(), p=getConf();
+  // Single gap drawn from the true distribution — same for both miners
+  const gap=Math.round(-actualMean*Math.log(Math.random()+1e-9));
+
+  // ── ECDF proof miner ──────────────────────────────────────────
+  const s=ecdf.state;
+  const wE=s.fitted?ecdfWindow(s,p):d;
+  ecdf.win=wE;
+  ecdf.att++;
+  if(gap<=wE){ecdfAdd(s,gap);ecdf.shares++;ecdf.hist.push(1)}
+  else{ecdf.misses++;ecdf.hist.push(0)}
+  if(ecdf.hist.length>MAX)ecdf.hist.shift();
+
+  // ── Plain miner — always w = nominal diff ─────────────────────
+  const wP=d;
+  plain_.att++;
+  if(gap<=wP){plain_.shares++;plain_.hist.push(1)}
+  else{plain_.misses++;plain_.hist.push(0)}
+  if(plain_.hist.length>MAX)plain_.hist.shift();
+
+  // Rolling hit rates
+  const ehr=roll(ecdf.hist), phr=roll(plain_.hist);
+  const emr=ecdf.att>0?ecdf.misses/ecdf.att:0;
+  const pmr=plain_.att>0?plain_.misses/plain_.att:0;
+  const ratio=phr>0.001?ehr/phr:1;
+  if(tickN>15&&ratio>peakRatio)peakRatio=ratio;
+
+  pushTrim(tArr,tickN,MAX);
+  pushTrim(e_hr,ehr,MAX); pushTrim(p_hr,phr,MAX);
+  pushTrim(e_mr,emr,MAX); pushTrim(p_mr,pmr,MAX);
+  pushTrim(ratioArr,ratio,MAX);
+
+  updateCharts(ehr,phr,emr,pmr,ratio);
+}
+
+function roll(hist){
+  if(!hist.length)return 0;
+  const w=Math.min(ROLL,hist.length);
+  return hist.slice(-w).reduce((a,b)=>a+b,0)/w;
+}
+
+// ─── Charts ───────────────────────────────────────────────────────────────────
+let chart1,chart2,chart3;
+
+function initCharts(){
+  const ax='#3a7a3a', grid='rgba(22,55,22,.28)', noLeg={display:false};
+
+  // Chart 1: Rolling hit rate
+  chart1=new Chart(document.getElementById('c1'),{type:'line',data:{labels:[],datasets:[
+    {label:'ECDF',data:[],borderColor:'#44ff88',borderWidth:2,pointRadius:0,tension:.35,fill:false},
+    {label:'plain',data:[],borderColor:'#ffaa33',borderWidth:2,pointRadius:0,tension:.35,fill:false},
+    {label:'target',data:[],borderColor:'rgba(200,255,200,.2)',borderDash:[5,4],borderWidth:1.5,pointRadius:0,tension:0,fill:false},
+  ]},options:{
+    responsive:true,maintainAspectRatio:false,animation:{duration:0},
+    plugins:{legend:noLeg},
+    scales:{
+      x:{display:false,grid:{color:grid}},
+      y:{min:0,max:1.05,
+        title:{display:true,text:'P(hit)',color:ax,font:{size:9}},
+        ticks:{color:ax,font:{size:8},maxTicksLimit:5,callback:v=>(v*100).toFixed(0)+'%'},
+        grid:{color:grid}}
+    }
+  }});
+
+  // Chart 2: Cumulative miss rate
+  chart2=new Chart(document.getElementById('c2'),{type:'line',data:{labels:[],datasets:[
+    {label:'ECDF miss',data:[],borderColor:'#44ff88',borderWidth:1.5,pointRadius:0,tension:.3,fill:true,backgroundColor:'rgba(68,255,136,.05)'},
+    {label:'plain miss',data:[],borderColor:'#ffaa33',borderWidth:1.5,pointRadius:0,tension:.3,fill:true,backgroundColor:'rgba(255,170,51,.12)'},
+  ]},options:{
+    responsive:true,maintainAspectRatio:false,animation:{duration:0},
+    plugins:{legend:noLeg},
+    scales:{
+      x:{display:false,grid:{color:grid}},
+      y:{min:0,max:1,
+        title:{display:true,text:'miss rate',color:ax,font:{size:9}},
+        ticks:{color:ax,font:{size:8},maxTicksLimit:5,callback:v=>(v*100).toFixed(0)+'%'},
+        grid:{color:grid}}
+    }
+  }});
+
+  // Chart 3: Enhancement ratio
+  chart3=new Chart(document.getElementById('c3'),{type:'line',data:{labels:[],datasets:[
+    {label:'ratio',data:[],borderColor:'#88aaff',borderWidth:2,pointRadius:0,tension:.35,fill:true,backgroundColor:'rgba(136,170,255,.07)'},
+    {label:'parity',data:[],borderColor:'#2a4a2a',borderDash:[3,3],borderWidth:1,pointRadius:0,tension:0,fill:false},
+    {label:'theory pre-drift',data:[],borderColor:'rgba(68,255,136,.3)',borderDash:[2,4],borderWidth:1,pointRadius:0,tension:0,fill:false},
+  ]},options:{
+    responsive:true,maintainAspectRatio:false,animation:{duration:0},
+    plugins:{legend:noLeg},
+    scales:{
+      x:{display:false,grid:{color:grid}},
+      y:{min:.5,max:4,
+        title:{display:true,text:'ECDF÷plain',color:ax,font:{size:9}},
+        ticks:{color:ax,font:{size:8},maxTicksLimit:5,callback:v=>v.toFixed(1)+'×'},
+        grid:{color:grid}}
+    }
+  }});
+}
+
+// ─── Theoretical enhancement values ──────────────────────────────────────────
+function theoreticalEnhancement(diff, mu, targetConf){
+  // P(hit) plain = 1-exp(-diff/mu)
+  // P(hit) ECDF = targetConf (after calibration)
+  const pPlain=1-Math.exp(-diff/mu);
+  return pPlain>0?targetConf/pPlain:1;
+}
+
+// ─── Update ───────────────────────────────────────────────────────────────────
+function updateCharts(ehr,phr,emr,pmr,ratio){
+  const conf=getConf();
+
+  // Chart 1
+  chart1.data.labels=tArr;
+  chart1.data.datasets[0].data=e_hr;
+  chart1.data.datasets[1].data=p_hr;
+  chart1.data.datasets[2].data=tArr.map(()=>conf);
+  chart1.update('none');
+
+  // Chart 2
+  chart2.data.labels=tArr;
+  chart2.data.datasets[0].data=e_mr;
+  chart2.data.datasets[1].data=p_mr;
+  chart2.update('none');
+
+  // Chart 3 — ratio + theoretical baselines
+  const d=getDiff(), mu=actualMean;
+  const thEnh=theoreticalEnhancement(d,mu,conf);
+  chart3.data.labels=tArr;
+  chart3.data.datasets[0].data=ratioArr;
+  chart3.data.datasets[1].data=tArr.map(()=>1);            // parity
+  chart3.data.datasets[2].data=tArr.map(()=>thEnh);        // theoretical ceiling
+  chart3.update('none');
+
+  // ── Stats panel ──────────────────────────────────────────────
+  const fmt=v=>(v*100).toFixed(1)+'%';
+
+  document.getElementById('s1_ehr').textContent=fmt(ehr);
+  document.getElementById('s1_phr').textContent=fmt(phr);
+  document.getElementById('s1_enh').textContent=phr>.01?`${(ratio).toFixed(2)}×`:' —';
+
+  document.getElementById('s2_em').textContent=fmt(emr);
+  document.getElementById('s2_pm').textContent=fmt(pmr);
+  const saved=pmr-emr;
+  document.getElementById('s2_sv').textContent=saved>0?`+${fmt(saved)} fewer misses`:'—';
+
+  document.getElementById('s3_cur').textContent=ratio.toFixed(3)+'×';
+  document.getElementById('s3_pk').textContent=peakRatio.toFixed(3)+'×';
+
+  // Proof state label
+  const s=ecdf.state;
+  const n=s.n;
+  const ps=n>=50?'LOCKED':n>=20?'FITTED':n>=8?'CALIBRATING':n>=3?'SPARSE':'PRIOR';
+  const pscol={PRIOR:'#334',SPARSE:'#aa7722',CALIBRATING:'#cccc22',FITTED:'#33cc55',LOCKED:'#33ffaa'}[ps];
+  document.getElementById('s3_ps').textContent=ps;
+  document.getElementById('s3_ps').style.color=pscol;
+
+  // Big stat boxes
+  document.getElementById('b_ehr').textContent=fmt(ehr);
+  document.getElementById('b_phr').textContent=fmt(phr);
+  document.getElementById('b_enh').textContent=phr>.01?`${ratio.toFixed(2)}×`:' —';
+
+  // Mini bars (proportional to hit rate, max height 32px)
+  const maxBar=32;
+  const eBarH=Math.round(ehr*maxBar);
+  const pBarH=Math.round(phr*maxBar);
+  const barE=document.getElementById('barE');
+  const barP=document.getElementById('barP');
+  barE.style.height=Math.max(2,eBarH)+'px';
+  barP.style.height=Math.max(2,pBarH)+'px';
+  barE.textContent=fmt(ehr);
+  barP.textContent=fmt(phr);
+
+  // Detail rows
+  document.getElementById('d_ew').textContent=ecdf.win.toLocaleString();
+  document.getElementById('d_mu').textContent=s.fitted?s.mean.toFixed(0)+' (fitted)':'calibrating…';
+  document.getElementById('d_am').textContent=actualMean.toFixed(0)+(driftActive?` ← ${(actualMean/getDiff()).toFixed(1)}× nominal`:'');
+  document.getElementById('d_es').textContent=ecdf.shares;
+  document.getElementById('d_ps').textContent=plain_.shares;
+
+  const kss=s.n>=2?ksScore(s.gaps,s.mean):0;
+  const ksPct=(kss*100).toFixed(0)+'%';
+  document.getElementById('d_ks').textContent=s.fitted?ksPct:'no calibration';
+  document.getElementById('d_ks').style.color=kss>.7?'#44ff88':kss>.4?'#cccc33':'#aa5522';
+  document.getElementById('proofFill').style.width=(kss*100)+'%';
+  document.getElementById('proofFill').style.background=kss>.7?'#44ff8888':kss>.4?'#cccc3366':'#aa552266';
+
+  document.getElementById('tickLbl').textContent=`t=${tickN} | n_gaps=${s.n}`;
+}
+
+// ─── Drift injection ──────────────────────────────────────────────────────────
+function injectDrift(){
+  const factor=+document.getElementById('driftSl').value/10;
+  actualMean=getDiff()*factor;
+  driftActive=true;
+  document.getElementById('driftBadge').style.display='inline-block';
+  document.getElementById('ctrlBar').style.borderBottomColor='#772211';
+  document.getElementById('driftBtn').style.display='none';
+  // Mark with a faint vertical line: add NaN to create gap in existing data, annotate manually
+  // We just show the drift badge — chart discontinuity will be visible naturally
+}
+
+// ─── Reset ────────────────────────────────────────────────────────────────────
+function resetAll(){
+  ecdf={state:ecdfReset(),shares:0,misses:0,att:0,hist:[],win:0};
+  plain_={shares:0,misses:0,att:0,hist:[]};
+  actualMean=getDiff();driftActive=false;tickN=0;peakRatio=1;
+  tArr=[];e_hr=[];p_hr=[];e_mr=[];p_mr=[];ratioArr=[];
+  document.getElementById('driftBadge').style.display='none';
+  document.getElementById('ctrlBar').style.borderBottomColor='#1a3a1a';
+  document.getElementById('driftBtn').style.display='';
+  [chart1,chart2,chart3].forEach(c=>{
+    c.data.labels=[];c.data.datasets.forEach(d=>d.data=[]);c.update('none');
+  });
+  document.getElementById('proofFill').style.width='0%';
+}
+
+// ─── Controls ─────────────────────────────────────────────────────────────────
+document.getElementById('confSl').addEventListener('input',function(){
+  document.getElementById('confVal').textContent=this.value+'%';
+});
+document.getElementById('driftSl').addEventListener('input',function(){
+  document.getElementById('driftVal').textContent=(this.value/10).toFixed(1)+'×';
+});
+document.getElementById('diffSel').addEventListener('change',resetAll);
+
+let simInterval=null;
+function getInterval(){
+  const r=document.getElementById('rateSel').value;
+  return r==='fast'?55:r==='slow'?480:170;
+}
+document.getElementById('rateSel').addEventListener('change',()=>{
+  clearInterval(simInterval);simInterval=setInterval(tick,getInterval());
+});
+
+// ─── Boot ─────────────────────────────────────────────────────────────────────
+initCharts();
+simInterval=setInterval(tick,getInterval());
+</script>
