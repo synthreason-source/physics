@@ -1,36 +1,48 @@
 """
-512-Channel Optoelectronic-Thermoelectronic Layered Grid
-Hardware Simulator — Factorisation Solver  v2.0
+512-Channel Memristive Crossbar Layered Grid
+Hardware Simulator — Factorisation Solver  v3.0
 ==========================================================
 Physical architecture — each channel tests one candidate divisor k
-against target N. All 512 channels fire in parallel per sweep.
+against target N. All 512 channels fire in parallel per sweep, each
+channel implemented as a stack of four distinct memristive devices.
 
-LAYER 0 — Mach-Zehnder Optical Modulator
-  A coherent laser (λ=1550 nm) is split, one arm phase-shifted by
-  φ = 2π·(N mod k)/k radians (the normalised residue as a phase).
-  At the output coupler the two arms interfere:
-    I_out = I_0 · cos²(φ/2)
-  Constructive (I_out → I_0) when φ=0, i.e. rem=0 (exact factor).
-  LOCK threshold: I_out/I_0 > 0.97  (φ < ~14°).
+LAYER 0 — TiO2 Memristor Crossbar Cell (HP Linear Ion-Drift Model)
+  The doped/undoped boundary inside the TiO2(-x) thin film sits at a
+  normalised position driven by the residue:
+    x = (N mod k) / k                (dopant boundary fraction, 0..1)
+  Memristance (series mixture of doped R_on region and undoped R_off
+  region):
+    M(x) = R_on + (R_off − R_on)·x     R_on = 100 Ω, R_off = 16 kΩ
+  Normalised conductance g = R_on / M(x)  (g → 1 as x → 0, i.e. as the
+  boundary retracts fully into the low-resistance doped state).
+  SET/LOCK threshold: g > 0.97  (boundary within ~3% of full retraction)
 
-LAYER 1 — Peltier Thermoelectric Gate
-  A Peltier cell drives a ΔT proportional to the normalised residue:
-    ΔT = T_max · (rem / k)        T_max = 80 K
-  Junction temperature: T = T_ambient + ΔT  (T_ambient = 295 K)
-  Gate OPEN when T < T_threshold = 296 K  (rem/k < 1/80 ≈ 1.25%)
-  Seebeck voltage V_S = S·ΔT  displayed (S = 200 µV/K, bismuth telluride).
+LAYER 1 — VO2 Mott Memristor (Self-Heating Threshold Switch)
+  Joule self-heating from the residue current drives the vanadium
+  dioxide film toward its insulator–metal transition (IMT):
+    ΔT = ΔT_max · (rem / k)          ΔT_max = 80 K
+  Film temperature: T = T_ambient + ΔT   (T_ambient = 295 K)
+  Device switches to the metallic low-resistance state (gate OPEN)
+  when T stays below the IMT threshold T_IMT = 296 K
+  (rem/k < 1/80 ≈ 1.25%).
+  Switching figure of merit V_th = S·ΔT displayed (S = 200 µV/K,
+  thermoelectric readout coefficient of the contact stack).
 
-LAYER 2 — RF Interference Mesh (microwave standing-wave cancellation)
-  A microwave tone at f = f_0·(rem/k) is injected into a resonant cavity.
-  The cavity Q-factor produces a standing wave amplitude:
+LAYER 2 — Crossbar Sneak-Path Cancellation Mesh
+  Parasitic sneak-path currents around the crossbar array are probed
+  with a differential read tone injected at a rate f = f_0·(rem/k).
+  The array's parasitic-path interference produces a residual
+  sneak-current amplitude:
     A = |sin(π·rem/k)|
-  When rem=0 → A=0 → full destructive cancellation → mesh CLEAR (factor).
-  CLEAR threshold: A < 0.05  (within ~3° of null).
+  When rem = 0 → A = 0 → full destructive cancellation → mesh CLEAR
+  (candidate is a true factor, no sneak-path ambiguity).
+  CLEAR threshold: A < 0.05.
 
-LAYER 3 — Digital Residue Comparator (output latch)
-  A modular arithmetic unit computes rem = N mod k in hardware.
-  Output register latches HIGH (3.3 V) when rem == 0.
-  All other layers must agree for a CONFIRMED FACTOR output.
+LAYER 3 — Binary ReRAM Output Latch
+  A digital modular-arithmetic unit computes rem = N mod k and drives
+  a binary ReRAM cell into LRS (logic HIGH, 3.3 V) when rem == 0, or
+  leaves it in HRS (logic LOW, 0 V) otherwise. All layers must agree
+  for a CONFIRMED FACTOR output.
 """
 
 import math, time, sys, threading, os, re as _re
@@ -78,83 +90,85 @@ GRID_COLS = 32
 GRID_ROWS = CHANNELS // GRID_COLS   # 16
 
 LAYERS = [
-    "MZ Optical Modulator",
-    "Peltier Thermo Gate",
-    "RF Interference Mesh",
-    "Residue Comparator",
+    "TiO2 Memristor Crossbar",
+    "VO2 Threshold Switch",
+    "Sneak-Path Cancel Mesh",
+    "ReRAM Output Latch",
 ]
 
 # ── physical parameters ───────────────────────────────────────────────────────
-MZ_LOCK_THRESHOLD  = 0.97   # I_out/I_0 must exceed this  (φ < ~14°)
-T_AMBIENT          = 295.0  # K  — room temperature cold side
-T_MAX_DELTA        = 80.0   # K  — max Peltier ΔT at full residue
-T_GATE_OPEN        = 296.0  # K  — gate opens below this (rem/k < 1/80)
-SEEBECK_UV_PER_K   = 200.0  # µV/K  — Bi₂Te₃ Seebeck coefficient
-RF_NULL_THRESHOLD  = 0.05   # standing-wave amplitude below this = CLEAR
+R_ON               = 100.0    # Ω   — fully-doped (SET) memristance
+R_OFF              = 16000.0  # Ω   — fully-undoped (RESET) memristance
+G_LOCK_THRESHOLD   = 0.97     # normalised conductance must exceed this
+T_AMBIENT          = 295.0    # K   — ambient film temperature
+T_MAX_DELTA        = 80.0     # K   — max Joule ΔT at full residue
+T_IMT              = 296.0    # K   — insulator-metal transition threshold
+SEEBECK_UV_PER_K   = 200.0    # µV/K — thermoelectric readout coefficient
+RF_NULL_THRESHOLD  = 0.05     # sneak-path amplitude below this = CLEAR
 
 # ── layer physics ─────────────────────────────────────────────────────────────
 
-def layer_mz_optical(n, k):
+def layer_tio2_memristor(n, k):
     """
-    Mach-Zehnder interferometer.
-    Phase shift φ = 2π · (N mod k) / k
-    Normalised output intensity I = cos²(φ/2)
-    LOCK when I > MZ_LOCK_THRESHOLD  ↔  rem/k < ~2.4%
+    HP TiO2 linear ion-drift memristor.
+    Doped-boundary fraction x = (N mod k)/k
+    Memristance M(x) = R_on + (R_off - R_on)*x
+    Normalised conductance g = R_on / M(x)
+    SET/LOCK when g > G_LOCK_THRESHOLD (boundary fully retracted, x→0)
     """
-    rem  = n % k
-    phi  = 2 * math.pi * rem / k          # radians
-    I    = math.cos(phi / 2) ** 2         # normalised intensity 0..1
-    lock = I > MZ_LOCK_THRESHOLD
-    phi_deg = math.degrees(phi)
-    return lock, f"φ={phi_deg:7.3f}°  I={I:.4f}  {'LOCK' if lock else 'DRIFT'}"
+    rem = n % k
+    x   = rem / k
+    M   = R_ON + (R_OFF - R_ON) * x
+    g   = R_ON / M
+    lock = g > G_LOCK_THRESHOLD
+    return lock, f"x={x:6.4f}  M={M:8.1f}Ω  g={g:.4f}  {'SET/LOCK' if lock else 'DRIFT'}"
 
 
-def layer_peltier_thermo(n, k):
+def layer_vo2_threshold_switch(n, k):
     """
-    Peltier thermoelectric gate.
-    ΔT = T_MAX_DELTA · (rem / k)
-    T_junction = T_AMBIENT + ΔT
-    V_Seebeck = SEEBECK_UV_PER_K · ΔT  (µV)
-    Gate OPEN when T_junction < T_GATE_OPEN  (rem/k < 1/80)
+    VO2 Mott memristor, self-heating threshold switch.
+    ΔT = T_MAX_DELTA · (rem/k)
+    T_film = T_AMBIENT + ΔT
+    V_th = SEEBECK_UV_PER_K · ΔT  (µV, switching figure of merit)
+    Gate OPEN (metallic LRS) when T_film < T_IMT (rem/k < 1/80)
     """
-    rem  = n % k
-    dT   = T_MAX_DELTA * (rem / k)
-    T    = T_AMBIENT + dT
-    Vs   = SEEBECK_UV_PER_K * dT          # µV
-    gate = T < T_GATE_OPEN
-    return gate, f"ΔT={dT:5.2f}K  T={T:6.2f}K  Vs={Vs:6.1f}µV  {'OPEN' if gate else 'CLOSED'}"
+    rem = n % k
+    dT  = T_MAX_DELTA * (rem / k)
+    T   = T_AMBIENT + dT
+    Vth = SEEBECK_UV_PER_K * dT
+    gate = T < T_IMT
+    return gate, f"ΔT={dT:5.2f}K  T={T:6.2f}K  Vth={Vth:6.1f}µV  {'LRS/OPEN' if gate else 'HRS/CLOSED'}"
 
 
-def layer_rf_mesh(n, k):
+def layer_sneak_path_mesh(n, k):
     """
-    RF standing-wave interference mesh.
-    Amplitude A = |sin(π · rem / k)|
-    CLEAR (factor signal) when A < RF_NULL_THRESHOLD
-    rem=0 → A=0 (perfect null) → CLEAR
+    Crossbar sneak-path cancellation mesh.
+    Residual sneak-current amplitude A = |sin(pi * rem/k)|
+    CLEAR (factor signal, no sneak ambiguity) when A < RF_NULL_THRESHOLD
     """
-    rem  = n % k
-    A    = abs(math.sin(math.pi * rem / k))
+    rem = n % k
+    A   = abs(math.sin(math.pi * rem / k))
     clear = A < RF_NULL_THRESHOLD
     return clear, f"A={A:.4f}  {'CLEAR' if clear else 'ACTIVE'}"
 
 
-def layer_residue_comparator(n, k):
+def layer_reram_latch(n, k):
     """
-    Digital modular arithmetic comparator.
+    Binary ReRAM output latch.
     Computes rem = N mod k in a carry-save adder array.
-    Output latch: 3.3 V when rem == 0, else 0 V.
+    Cell driven to LRS (3.3 V, logic HIGH) when rem == 0, else HRS (0 V).
     """
     rem   = n % k
     latch = rem == 0
     rail  = 3.3 if latch else 0.0
-    return latch, f"rem={rem:<8} V_out={rail:.1f}V  {'HIGH ✓' if latch else 'LOW'}"
+    return latch, f"rem={rem:<8} V_out={rail:.1f}V  {'LRS/HIGH ✓' if latch else 'HRS/LOW'}"
 
 
 LAYER_FNS = [
-    layer_mz_optical,
-    layer_peltier_thermo,
-    layer_rf_mesh,
-    layer_residue_comparator,
+    layer_tio2_memristor,
+    layer_vo2_threshold_switch,
+    layer_sneak_path_mesh,
+    layer_reram_latch,
 ]
 
 # ── channel sweep ─────────────────────────────────────────────────────────────
@@ -223,9 +237,9 @@ def render_layer_panel(k, layers):
 
     hdr("└", "┘")
 
-# ── thermal map ───────────────────────────────────────────────────────────────
+# ── thermal map (VO2 threshold-switch layer) ─────────────────────────────────
 def render_thermal_map(n, results):
-    print(c("  PELTIER THERMOELECTRIC — Junction Temperature Map", B+YL))
+    print(c("  VO2 THRESHOLD SWITCH — Film Temperature Map", B+YL))
     print(c("  Hot=high ΔT (large rem), Cold=low ΔT (small rem), Green=factor\n", D))
     for row in range(GRID_ROWS):
         line = "  "
@@ -239,7 +253,7 @@ def render_thermal_map(n, results):
             else:
                 rem   = n % k if k <= n else k
                 ratio = rem / k if k else 1.0
-                if   ratio < 0.013: line += c("▓", YL+B)   # ΔT < 1 K  (gate-open zone)
+                if   ratio < 0.013: line += c("▓", YL+B)   # ΔT < 1 K  (near-IMT zone)
                 elif ratio < 0.1:   line += c("▒", YL)
                 elif ratio < 0.4:   line += c("░", CY)
                 else:               line += c("·", BL+D)
@@ -247,18 +261,18 @@ def render_thermal_map(n, results):
     print()
     print(c("  Legend: ", D)
         + c("█", GR+B) + c(" Factor(ΔT=0)  ", D)
-        + c("▓", YL+B) + c(" Gate-open zone(ΔT<1K)  ", D)
+        + c("▓", YL+B) + c(" Near-IMT zone(ΔT<1K)  ", D)
         + c("▒", YL)   + c(" Warm  ", D)
         + c("░", CY)   + c(" Cool  ", D)
         + c("·", BL+D) + c(" Cold(large rem)", D))
     print()
 
-# ── optical phase map ─────────────────────────────────────────────────────────
-PHASE_CHARS = " ·∘○◎●◉"
+# ── ion-drift boundary map (TiO2 memristor layer) ────────────────────────────
+DRIFT_CHARS = " ·∘○◎●◉"
 
 def render_optical_map(n, results):
-    print(c("  MACH-ZEHNDER OPTICAL — Phase Map  (φ = 2π·rem/k)", B+CY))
-    print(c("  Bright=constructive (small φ), dim=destructive, green=LOCK\n", D))
+    print(c("  TiO2 MEMRISTOR — Ion-Drift Boundary Map  (x = rem/k)", B+CY))
+    print(c("  Bright=near-SET (small x, low M), dim=near-RESET, green=LOCK\n", D))
     for row in range(GRID_ROWS):
         line = "  "
         for col in range(GRID_COLS):
@@ -269,11 +283,12 @@ def render_optical_map(n, results):
             if hit:
                 line += c("◉", GR+B)
             else:
-                rem   = n % k if k else 0
-                phi   = 2 * math.pi * rem / k if k else math.pi
-                I     = math.cos(phi / 2) ** 2   # 0..1
-                ch    = PHASE_CHARS[int(I * (len(PHASE_CHARS) - 1))]
-                col_c = CY+B if I > 0.9 else (CY if I > 0.6 else (YL if I > 0.3 else D))
+                rem = n % k if k else 0
+                x   = rem / k if k else 1.0
+                M   = R_ON + (R_OFF - R_ON) * x
+                g   = R_ON / M               # 0..1, near 1 when x small
+                ch  = DRIFT_CHARS[int(g * (len(DRIFT_CHARS) - 1))]
+                col_c = CY+B if g > 0.9 else (CY if g > 0.6 else (YL if g > 0.3 else D))
                 line += c(ch, col_c)
         print(line)
     print()
@@ -311,8 +326,8 @@ def animated_sweep(n, offset=0):
 def factorise(n):
     cls()
     hline("═", col=CY+B)
-    print(c(centre("512-CHANNEL OPTOELECTRONIC-THERMOELECTRONIC"), CY+B))
-    print(c(centre("LAYERED GRID HARDWARE SIMULATOR  v2.0"), CY+B))
+    print(c(centre("512-CHANNEL MEMRISTIVE CROSSBAR"), CY+B))
+    print(c(centre("LAYERED GRID HARDWARE SIMULATOR  v3.0"), CY+B))
     hline("═", col=CY+B)
     print()
 
@@ -333,10 +348,10 @@ def factorise(n):
     print()
     print(c("  Physical layers:", B+WH))
     descs = [
-        "Mach-Zehnder modulator  λ=1550 nm  lock threshold I>0.97",
-        "Peltier junction  ΔT=80K·(rem/k)  gate open below T=296 K",
-        "RF standing-wave cavity  null threshold A<0.05",
-        "Carry-save modular comparator  3.3 V latch",
+        "TiO2 ion-drift memristor  R_on=100Ω R_off=16kΩ  lock g>0.97",
+        "VO2 Mott threshold switch  ΔT=80K·(rem/k)  IMT below T=296K",
+        "Crossbar sneak-path mesh  null threshold A<0.05",
+        "Binary ReRAM latch  LRS/HRS  3.3 V output",
     ]
     for i, (lname, desc) in enumerate(zip(LAYERS, descs)):
         print(f"    {c(f'L{i}', B+CY)} {c(lname, WH):<24} {c(desc, D)}")
@@ -431,9 +446,9 @@ if __name__ == "__main__":
         try:
             N = int(sys.argv[1])
         except ValueError:
-            print(c("Usage: python grid_simulator.py <integer>", RD)); sys.exit(1)
+            print(c("Usage: python memristor_grid_simulator.py <integer>", RD)); sys.exit(1)
     else:
-        print(c("512-Channel Grid Simulator  v2.0", CY+B))
+        print(c("512-Channel Memristive Crossbar Simulator  v3.0", CY+B))
         try:
             N = int(input(c("  Enter N: ", YL)).strip())
         except ValueError:
