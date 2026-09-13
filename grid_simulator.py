@@ -7,8 +7,13 @@ against target N. All 512 channels fire in parallel per sweep, each
 channel implemented as a stack of four distinct memristive devices.
 
 LAYER 0 — TiO2 Memristor Crossbar Cell (HP Linear Ion-Drift Model)
-  The doped/undoped boundary inside the TiO2(-x) thin film sits at a
-  normalised position driven by the residue:
+  Fabrication: a Pt bottom-electrode array is lithographically etched
+  into 512 parallel word lines; a TiO2(-x) sol-gel is then spin-coated
+  conformally over the etched array and annealed, and Pt top
+  electrodes are deposited orthogonally to close each 1×1 crosspoint,
+  forming the crossbar. Each crosspoint is one factorisation channel.
+  The doped/undoped boundary inside the spin-coated TiO2(-x) film sits
+  at a normalised position driven by the residue:
     x = (N mod k) / k                (dopant boundary fraction, 0..1)
   Memristance (series mixture of doped R_on region and undoped R_off
   region):
@@ -348,7 +353,7 @@ def factorise(n):
     print()
     print(c("  Physical layers:", B+WH))
     descs = [
-        "TiO2 ion-drift memristor  R_on=100Ω R_off=16kΩ  lock g>0.97",
+        "Spin-coated TiO2 over etched Pt crossbar  R_on=100Ω R_off=16kΩ  lock g>0.97",
         "VO2 Mott threshold switch  ΔT=80K·(rem/k)  IMT below T=296K",
         "Crossbar sneak-path mesh  null threshold A<0.05",
         "Binary ReRAM latch  LRS/HRS  3.3 V output",
