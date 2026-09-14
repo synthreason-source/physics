@@ -1,114 +1,123 @@
 """
-Subset Sum solvers.
+Equation-driven subset-sum solver.
 
-Given a list of integers `nums` and a target `T`, decide whether some
-subset sums exactly to T (and, where noted, recover that subset).
+This actually WIRES the image's formula into the search, instead of just
+quoting it afterward:
 
-Three approaches, each with an honest complexity label:
+    N(k) = 2^n * (1-r)^k          (predicted candidates remaining after k steps)
 
-1. brute_force        - O(2^n) time.            Always correct, simplest.
-2. subset_sum_dp       - O(n * T) time/space.     Exact, but "pseudo-polynomial":
-                         fast only when T isn't astronomically large.
-3. meet_in_the_middle  - O(2^(n/2) * n) time.     Exact, exponential but with
-                         a much smaller exponent than brute force.
+At each level k of the search, we compute what N(k) *should* be for a given
+assumed constant rate r, and cap the beam (how many partial-sum branches we
+keep) at that predicted size -- i.e. we literally trust the formula to tell
+the search how aggressively it's allowed to prune.
 
-None of these run in true polynomial time for all inputs -- Subset Sum
-is NP-complete, so that would be a big deal (see the earlier discussion).
+If the formula's constant-r assumption is realistic for the instance, this
+finds the answer using close to the promised n^c work. If the assumption is
+wrong for the instance, the search prunes away the correct branch and FAILS
+to find a real answer -- which is the point.
 """
 
-from itertools import combinations
-from bisect import bisect_left
+import math, random
 
 
-def brute_force(nums, target):
-    """Check every subset directly. O(2^n)."""
-    n = len(nums)
-    for r in range(n + 1):
-        for combo in combinations(nums, r):
-            if sum(combo) == target:
-                return list(combo)
-    return None
-
-
-def subset_sum_dp(nums, target):
+def equation_beam_search(nums, target, r, c=2):
     """
-    Exact DP. O(n * target) time and space (only handles non-negative ints
-    and non-negative target; that's the standard formulation).
-
-    dp[t] = a subset (as indices) that sums to t, or None if unreachable.
-    We rebuild the subset via backpointers.
+    Beam search where beam width at step k is set directly by the
+    image's formula: width(k) = ceil(2^n * (1-r)^k), clipped to >=1
+    and to n^c as an absolute cap once the "collapsed" regime is reached.
     """
-    if target < 0:
-        return None
-
     n = len(nums)
-    # reachable[t] = index of the item used to FIRST reach sum t (for reconstruction)
-    reachable = [False] * (target + 1)
-    reachable[0] = True
-    choice = [[-1] * (target + 1) for _ in range(n)]  # choice[i][t] = True if item i used
+    cap = max(1, n ** c)
 
-    prev = reachable[:]
-    for i, x in enumerate(nums):
-        curr = prev[:]
-        if x <= target:
-            for t in range(target, x - 1, -1):
-                if prev[t - x] and not curr[t]:
-                    curr[t] = True
-                    choice[i][t] = 1
-        prev = curr
+    # beam = list of (partial_sum, path) tuples, all using items[0..k-1] decided
+    beam = [(0, [])]
 
-    if not prev[target]:
-        return None
+    for k in range(1, n + 1):
+        x = nums[k - 1]
+        # expand: try include and exclude for every state in the beam
+        expanded = []
+        for partial, path in beam:
+            # exclude
+            expanded.append((partial, path))
+            # include (only if it doesn't already overshoot)
+            if partial + x <= target:
+                expanded.append((partial + x, path + [x]))
 
-    # Reconstruct which items were used
-    t = target
-    result = []
+        # check for a solution before pruning
+        for partial, path in expanded:
+            if partial == target:
+                return path, k
+
+        # ---- THE EQUATION DRIVES THE PRUNING ----
+        # log-space to avoid OverflowError when 2**n is astronomically large:
+        # log(predicted_width) = n*ln2 + k*ln(1-r)
+        log_width = n * math.log(2) + k * math.log(1 - r)
+        if log_width > math.log(cap):
+            width = cap                      # already bigger than the cap; skip exponentiating
+        else:
+            width = max(1, min(cap, math.ceil(math.exp(log_width))))
+        # keep the `width` candidates closest to target (best-first heuristic)
+        expanded.sort(key=lambda item: abs(target - item[0]))
+        beam = expanded[:width]
+
+    return None, n
+
+
+def brute_force_bnb(nums, target):
+    """
+    Ground truth: real branch and bound, to check if a solution exists at all.
+    Iterative (explicit stack) so it doesn't hit Python's recursion limit
+    for large n -- the old recursive version added one call frame per item.
+    """
+    n = len(nums)
+    suffix = [0] * (n + 1)
     for i in range(n - 1, -1, -1):
-        if choice[i][t] == 1:
-            result.append(nums[i])
-            t -= nums[i]
-    return result
+        suffix[i] = suffix[i + 1] + nums[i]
 
+    stack = [(0, 0, [])]  # (index, partial_sum, path)
+    while stack:
+        i, partial, path = stack.pop()
+        if partial == target:
+            return path
+        if i == n or partial > target or partial + suffix[i] < target:
+            continue
+        stack.append((i + 1, partial, path))
+        stack.append((i + 1, partial + nums[i], path + [nums[i]]))
 
-def meet_in_the_middle(nums, target):
-    """
-    Split into two halves, enumerate all subset sums of each half,
-    then match complementary sums. O(2^(n/2) * n).
-    """
-    n = len(nums)
-    half = n // 2
-    left, right = nums[:half], nums[half:]
-
-    def all_sums_with_indices(arr):
-        # returns list of (sum, tuple_of_items) for every subset
-        out = []
-        for r in range(len(arr) + 1):
-            for combo in combinations(arr, r):
-                out.append((sum(combo), combo))
-        return out
-
-    left_sums = all_sums_with_indices(left)
-    right_sums = sorted(all_sums_with_indices(right), key=lambda p: p[0])
-    right_vals = [s for s, _ in right_sums]
-
-    for lsum, lcombo in left_sums:
-        need = target - lsum
-        idx = bisect_left(right_vals, need)
-        if idx < len(right_vals) and right_vals[idx] == need:
-            return list(lcombo) + list(right_sums[idx][1])
     return None
 
 
-if __name__ == "__main__":
-    nums = list(range(1, 210))
-    target = 440
+def run(label, nums, target, r, c=2):
+    n = len(nums)
+    print(f"=== {label}  (n={n}, target={target}, r={r}, c={c}) ===")
+
+    truth = brute_force_bnb(nums, target)
+    print(f"ground truth (real search): {'found ' + str(truth) if truth else 'no subset exists'}")
+
+    result, steps_used = equation_beam_search(nums, target, r, c)
+    print(f"equation-driven beam search: {'found ' + str(result) if result else 'FAILED to find one'}"
+          f"  (ran {steps_used} steps, cap n^c={n**c})")
+
+    if truth and not result:
+        print(">>> equation's assumed r was wrong for this instance: pruned away the real answer.")
+    elif truth and result:
+        print(">>> equation's assumed r happened to work here.")
+    print()
 
 
-    for name, fn in [
-        ("DP (pseudo-polynomial)", subset_sum_dp),
-    ]:
-        result = fn(nums, target)
-        status = f"found {result} (sum={sum(result)})" if result else "no subset found"
-        print(f"{name:26s}: {status}")
+random.seed(1)
+n = 24900
 
-   
+# EASY: earlier we measured real r ~= 0.44 for this kind of instance
+easy_nums = [random.randint(1, 20) for _ in range(n)]
+easy_target = sum(random.sample(easy_nums, 5))
+run("EASY (matches its own measured r)", easy_nums, easy_target, r=0.44)
+
+# HARD: earlier we measured real r ~= 0.11 for this kind of instance,
+# but let's feed it the OPTIMISTIC r=0.44 anyway -- same r, harder instance
+hard_nums = random.sample(range(1, 10_000_000), n)
+hard_target = sum(random.sample(hard_nums, 5))
+run("HARD (fed the SAME optimistic r=0.44)", hard_nums, hard_target, r=0.44)
+
+# HARD, but fed its own true measured r=0.11 instead
+run("HARD (fed its own true r=0.11)", hard_nums, hard_target, r=0.11)
