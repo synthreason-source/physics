@@ -160,12 +160,6 @@ if __name__ == "__main__":
     random.seed(1)
     n = 100000000
 
-    # EASY-style: small clustered values -- r should auto-measure high
-    easy_nums = [random.randint(1, 20) for _ in range(n)]
-    easy_target = sum(random.sample(easy_nums, 50))
-    run("large n, small clustered values", easy_nums, easy_target,
-        max_beam_width=500, seed=1)
-
     # HARD-style: large spread-out distinct-ish values -- r should auto-measure low
     hard_nums = [random.randint(1, 10_000_000) for _ in range(n)]
     hard_target = sum(random.sample(hard_nums, 50))
