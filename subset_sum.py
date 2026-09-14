@@ -158,10 +158,11 @@ def run(label, nums, target, c=2, max_beam_width=2000, r=None, seed=None):
 
 if __name__ == "__main__":
     random.seed(1)
-    n = 100000000
+    n = 1000000
 
     # HARD-style: large spread-out distinct-ish values -- r should auto-measure low
     hard_nums = [random.randint(1, 10_000_000) for _ in range(n)]
-    hard_target = sum(random.sample(hard_nums, 50))
+    hard_target = sum(random.sample(hard_nums, 500))
     run("large n, large spread-out values", hard_nums, hard_target,
         max_beam_width=500, seed=2)
+    input()
